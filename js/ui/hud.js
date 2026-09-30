@@ -103,6 +103,20 @@ export function createHud(handlers) {
         ? 'Typed seed: resets to the start of this puzzle. Use Menu to pick another seed.'
         : 'Generate a new random puzzle';
     },
+    /** 1v1 mode: no Restart/New, a match-round stat, an opponent stat, and a countdown timer. */
+    setVersus(on, { round, rounds } = {}) {
+      $('restart').hidden = on;
+      $('new').hidden = on;
+      $('stat-match').hidden = !on;
+      $('stat-opponent').hidden = !on;
+      $('time-label').textContent = on ? 'Time left' : 'Time';
+      $('menu-btn').textContent = on ? 'Leave' : 'Menu';
+      if (on) $('match-round').textContent = `${round}/${rounds}`;
+    },
+    setOpponent({ name, text }) {
+      $('opp-name').textContent = name;
+      $('opp-status').textContent = text;
+    },
     setStats({ moves, seconds, canUndo, solved }) {
       $('moves').textContent = moves;
       $('time').textContent = formatTime(seconds);

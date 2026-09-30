@@ -76,12 +76,18 @@ export const HOME = {
 // ---------------------------------------------------------------------------
 export const MULTIPLAYER = {
   port: 8080,
+  // Host's match settings: defaults and the choices offered in the lobby.
   rounds: 3,
-  maxRounds: 9,
+  roundOptions: [1, 3, 5, 7, 9],
   roundTimeLimitSec: 180,
-  countdownSec: 3,
+  timeLimitOptions: [60, 120, 180, 300, 600],
   hints: true,
+  controlMode: 'shift',
+  countdownSec: 3,        // "3, 2, 1" before each round
+  roundBreakSec: 4,       // pause between rounds
   // Tie in match totals: 'fewerSeconds' (less total solve time wins), or 'draw'.
   tiebreak: 'fewerSeconds',
   roomCodeLength: 5,
+  maxNameLength: 16,
+  maxRooms: 500,
 };

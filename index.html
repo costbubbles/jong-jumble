@@ -42,8 +42,10 @@
       <div class="stats">
         <div class="stat"><span class="label">Round</span><span id="round-wind">-</span></div>
         <div class="stat"><span class="label">Moves</span><span id="moves">0</span></div>
-        <div class="stat"><span class="label">Time</span><span id="time">0:00</span></div>
+        <div class="stat"><span class="label" id="time-label">Time</span><span id="time">0:00</span></div>
         <div class="stat"><span class="label">Seed</span><span id="seed-display">-</span></div>
+        <div class="stat" id="stat-match" hidden><span class="label">Match</span><span id="match-round">-</span></div>
+        <div class="stat stat-opponent" id="stat-opponent" hidden><span class="label" id="opp-name">Opponent</span><span id="opp-status">-</span></div>
       </div>
       <div class="actions">
         <button id="undo" type="button" class="tile-btn" title="Undo (Ctrl+Z). Counts as a move.">Undo</button>
@@ -54,6 +56,7 @@
 
     <main>
       <div id="board-host" class="board-host"></div>
+      <div id="board-overlay" class="board-overlay" hidden><span id="board-overlay-text"></span></div>
     </main>
   </div>
 
@@ -87,6 +90,73 @@
         <button type="submit" id="setup-play" class="tile-btn primary">Play</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- 1v1: connect (name, create / join) and lobby (room code, players, host settings, ready). -->
+  <dialog id="versus-dialog" class="tile-dialog versus-dialog">
+    <section id="vs-connect">
+      <h2>1v1</h2>
+      <div class="field">
+        <label for="vs-name">Your name</label>
+        <input id="vs-name" maxlength="16" autocomplete="nickname" spellcheck="false">
+      </div>
+      <button id="vs-create" type="button" class="tile-btn primary wide">Create room</button>
+      <p class="or">or join a friend's room</p>
+      <form id="vs-join-form" class="join-row">
+        <input id="vs-code" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false" aria-label="Room code">
+        <button type="submit" class="tile-btn">Join</button>
+      </form>
+      <p id="vs-error" class="vs-error" role="alert"></p>
+      <div class="dialog-buttons">
+        <button id="vs-back" type="button" class="tile-btn">Title</button>
+      </div>
+    </section>
+
+    <section id="vs-lobby" hidden>
+      <h2>Room <span id="vs-room-code" class="room-code"></span></h2>
+      <p class="field-note">Send this code to your opponent.
+        <button id="vs-copy-code" type="button" class="link-btn">Copy code</button></p>
+      <ul id="vs-players" class="vs-players"></ul>
+      <fieldset id="vs-settings" class="vs-settings">
+        <legend id="vs-settings-legend">Match settings</legend>
+        <div class="field"><span class="field-label">Difficulty</span>
+          <div class="segmented" id="vs-difficulty" role="radiogroup" aria-label="Difficulty"></div></div>
+        <div class="field"><span class="field-label">Rounds</span>
+          <div class="segmented" id="vs-rounds" role="radiogroup" aria-label="Rounds"></div></div>
+        <div class="field"><span class="field-label">Time per round</span>
+          <div class="segmented" id="vs-time" role="radiogroup" aria-label="Time per round"></div></div>
+        <div class="field"><span class="field-label">Controls</span>
+          <div class="segmented" id="vs-controls" role="radiogroup" aria-label="Controls"></div></div>
+        <div class="field"><span class="field-label">Hints</span>
+          <label class="check"><input type="checkbox" id="vs-hints"><span>Group boxes, shanten and win glow</span></label></div>
+        <div class="field"><label for="vs-seed">Seed</label>
+          <input id="vs-seed" placeholder="random" maxlength="32" autocomplete="off" spellcheck="false"></div>
+      </fieldset>
+      <p id="vs-lobby-note" class="field-note" role="status"></p>
+      <div class="dialog-buttons">
+        <button id="vs-leave" type="button" class="tile-btn">Leave</button>
+        <button id="vs-ready" type="button" class="tile-btn primary">Ready</button>
+      </div>
+    </section>
+  </dialog>
+
+  <dialog id="leave-dialog" class="tile-dialog">
+    <h2>Leave match?</h2>
+    <p>Leaving now forfeits the match to your opponent.</p>
+    <div class="dialog-buttons">
+      <button id="leave-confirm" type="button" class="tile-btn">Leave</button>
+      <button id="leave-stay" type="button" class="tile-btn primary" autofocus>Keep playing</button>
+    </div>
+  </dialog>
+
+  <dialog id="match-dialog" class="tile-dialog match-dialog">
+    <h2 id="match-title">Match over</h2>
+    <p id="match-sub" class="match-sub"></p>
+    <div class="table-wrap"><table id="match-table" class="match-table"></table></div>
+    <div class="dialog-buttons">
+      <button id="match-leave" type="button" class="tile-btn">Leave room</button>
+      <button id="match-rematch" type="button" class="tile-btn primary" autofocus>Rematch</button>
+    </div>
   </dialog>
 
   <dialog id="help-dialog" class="tile-dialog help-dialog">

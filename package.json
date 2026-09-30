@@ -1,5 +1,5 @@
 {
-  "name": "mahjong-rows",
+  "name": "jong-jumble",
   "version": "0.1.0",
   "description": "Riichi mahjong sliding-tile puzzle (HTML5)",
   "private": true,
@@ -10,5 +10,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }

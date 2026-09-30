@@ -372,6 +372,84 @@ kbd {
 .share { display: flex; gap: 8px; }
 .share input { flex: 1; min-width: 0; font-size: 0.85rem; }
 
+/* ------------------------------------------------------------------ 1v1 */
+
+.tile-btn.wide { width: 100%; padding: 14px; font-size: 1.05rem; }
+.or { text-align: center; margin: 18px 0 10px; font-family: var(--pixel); font-size: 0.75rem; color: var(--muted); }
+.join-row { display: flex; gap: 8px; }
+.join-row input { flex: 1; min-width: 0; font-family: var(--pixel); font-size: 1.2rem; letter-spacing: 0.2em; text-transform: uppercase; }
+.vs-error { min-height: 1.4em; margin: 10px 0 0; color: var(--red); font-size: 0.9rem; }
+
+.versus-dialog { width: min(560px, calc(100vw - 32px)); }
+.room-code { font-family: var(--pixel); color: var(--ink); letter-spacing: 0.15em; }
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--red);
+  font-family: var(--pixel);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.vs-players { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 8px; }
+.vs-players li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 3px solid var(--gold);
+  box-shadow: inset 0 0 0 2px var(--rim);
+  font-family: var(--pixel);
+}
+.vs-players li.empty { color: var(--muted); border-style: dashed; box-shadow: none; }
+.vs-players li.ready { background: rgba(111, 168, 98, 0.12); }
+.vs-players .p-name { flex: 1; font-weight: 700; }
+.vs-players .p-tags em { font-style: normal; font-size: 0.68rem; color: #fff; background: var(--ink); padding: 2px 5px; margin-left: 4px; }
+.vs-players .p-ready { font-size: 0.78rem; color: var(--muted); }
+.vs-players li.ready .p-ready { color: var(--green); font-weight: 700; }
+
+.vs-settings { border: none; margin: 0; padding: 0; }
+.vs-settings legend { padding: 0; margin-bottom: 10px; font-family: var(--pixel); font-size: 0.8rem; color: var(--ink); }
+.vs-settings .field { margin-bottom: 12px; }
+.vs-settings .segmented span { padding: 7px 6px; font-size: 0.82rem; }
+.vs-settings:disabled .segmented label { cursor: default; }
+.vs-settings:disabled .segmented span { opacity: 0.75; }
+
+.stat-opponent span:last-child { color: var(--red); }
+
+/* countdown / waiting message over the board */
+main { position: relative; }
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 20;
+}
+.board-overlay span {
+  font-family: var(--pixel);
+  font-size: clamp(1.4rem, 3vw, 2.6rem);
+  font-weight: 700;
+  color: var(--red);
+  background: #fff;
+  padding: 18px 30px;
+  border: 4px solid var(--gold);
+  box-shadow: inset 0 0 0 3px var(--rim), 8px 8px 0 rgba(0, 0, 0, 0.18);
+}
+
+.match-dialog { width: min(720px, calc(100vw - 32px)); }
+.match-sub { margin: -8px 0 14px; font-family: var(--pixel); font-size: 0.9rem; color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+.match-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.match-table th, .match-table td { padding: 8px 10px; text-align: left; border-bottom: 2px solid #eee; white-space: nowrap; }
+.match-table th { font-family: var(--pixel); font-size: 0.78rem; color: var(--muted); }
+.match-table td.unsolved { color: var(--muted); }
+.match-table tr.total td { font-family: var(--pixel); font-weight: 700; border-bottom: none; border-top: 3px solid var(--gold); }
+.match-table td.winner { color: var(--green); }
+
 /* ------------------------------------------------------------------ home screen
    Authored on a 1920×1080 stage that matches the design mockup; js/ui/home.js scales it to fit. */
 

@@ -3,6 +3,7 @@
 // Flow: title screen → Solo → setup dialog (seed, difficulty, controls, hints) → Play → board.
 // The Menu button reopens the setup dialog (timer paused) with Resume / New game.
 // Shared links (?seed=…&d=…) skip straight to the board.
+// 1v1 (js/net/versus.js) reuses this board: rounds come from the server, moves are mirrored to it.
 
 import { DIFFICULTIES, DEFAULT_DIFFICULTY, GENERATION, UI } from './config.js';
 import { generatePuzzle } from './core/generator.js';
@@ -13,6 +14,7 @@ import { randomSeed } from './core/rng.js';
 import { createBoardView } from './ui/render.js';
 import { createHud } from './ui/hud.js';
 import { createHome } from './ui/home.js';
+import { createVersus } from './net/versus.js';
 
 const KEYS = {
   hints: 'jong-jumble.hints',
@@ -42,13 +44,15 @@ const state = {
   evals: [],
   hints: loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1',
   controlMode: loadSetting(KEYS.controls, UI.controlModeDefault),
+  // 1v1 round in progress: { timeLimitSec, startPerf, locked } (null in solo)
+  versus: null,
 };
 if (!DIFFICULTIES[state.difficulty]) state.difficulty = DEFAULT_DIFFICULTY;
 
 const elapsed = () => {
   if (state.solvedSeconds !== null) return state.solvedSeconds;
   if (state.startedAt === null) return 0;
-  return ((state.pausedAt ?? performance.now()) - state.startedAt) / 1000;
+  return Math.max(0, ((state.pausedAt ?? performance.now()) - state.startedAt) / 1000);
 };
 
 function pauseTimer() {
@@ -75,15 +79,17 @@ function syncUrl() {
 
 // ---------------------------------------------------------------------------
 
-function newPuzzle({ seed = '', difficulty = state.difficulty } = {}) {
+function newPuzzle({ seed = '', difficulty = state.difficulty, versus = false } = {}) {
   state.typed = seed !== '';
   state.seed = state.typed ? seed : randomSeed(GENERATION.randomSeedLength);
   state.difficulty = DIFFICULTIES[difficulty] ? difficulty : DEFAULT_DIFFICULTY;
-  saveSetting(KEYS.difficulty, state.difficulty);
   state.puzzle = generatePuzzle(state.seed, state.difficulty);
   hud.setPuzzle({ ...state, roundWind: state.puzzle.board.roundWind });
   boardHost.hidden = false;
-  syncUrl();
+  if (!versus) {
+    saveSetting(KEYS.difficulty, state.difficulty);
+    syncUrl();
+  }
   restart();
 }
 
@@ -104,22 +110,29 @@ function isSolved() {
 
 /** Applies a move if legal. Returns true when the board changed. */
 function doMove(move) {
-  if (!state.puzzle || isSolved()) return false;
+  if (!state.puzzle || isSolved() || versusBlocked()) return false;
   const next = applyMove(state.board, move);
   if (!next) return false;
   state.history.push({ board: state.board, move });
   state.board = next;
   countMove();
+  if (state.versus) versus.sendMove(move);
   update({ move, animate: true });
   return true;
 }
 
 function undo() {
-  if (isSolved() || !state.history.length) return;
+  if (isSolved() || !state.history.length || versusBlocked()) return;
   const { board, move } = state.history.pop();
   state.board = board;
   countMove(); // undo counts as a move
+  if (state.versus) versus.sendUndo();
   update({ move: inverseMove(move), animate: true });
+}
+
+/** In a 1v1 round, moves are only allowed after the countdown and before the round ends. */
+function versusBlocked() {
+  return !!state.versus && (state.versus.locked || performance.now() < state.versus.startPerf);
 }
 
 function countMove() {
@@ -136,6 +149,11 @@ function update({ move = null, animate }) {
   if (state.moves > 0 && state.evals.every((e) => e.solved)) {
     state.solvedSeconds = (performance.now() - state.startedAt) / 1000;
     view.setLocked(true);
+    if (state.versus) {
+      // The server confirms the solve and keeps the score hidden until the match ends.
+      renderStats();
+      return;
+    }
     const score = computeScore({
       startShanten: state.puzzle.startShanten,
       handPoints: state.evals.map((e) => e.points),
@@ -152,7 +170,7 @@ function update({ move = null, animate }) {
       rows: state.evals,
     }), UI.animationMs + 150);
   } else {
-    view.setLocked(false);
+    view.setLocked(!!state.versus?.locked);
   }
   renderStats();
 }
@@ -160,7 +178,7 @@ function update({ move = null, animate }) {
 function renderStats() {
   hud.setStats({
     moves: state.moves,
-    seconds: elapsed(),
+    seconds: state.versus ? Math.max(0, state.versus.timeLimitSec - elapsed()) : elapsed(),
     canUndo: state.history.length > 0,
     solved: isSolved(),
   });
@@ -182,7 +200,7 @@ const hud = createHud({
   onPlay: ({ seed, difficulty }) => newPuzzle({ seed, difficulty }),
   onResume: resumeTimer,
   onTitle: showHome,
-  onMenu: openMenu,
+  onMenu: () => (versus.active ? versus.requestLeave() : openMenu()),
   onUndo: undo,
   onRestart: restart,
   onNew: () => (state.typed ? restart() : newPuzzle()),
@@ -226,8 +244,55 @@ document.addEventListener('keydown', (e) => {
 });
 
 setInterval(() => {
-  if (state.startedAt !== null && !isSolved() && state.pausedAt === null) renderStats();
+  if (state.startedAt !== null && !isSolved() && state.pausedAt === null && !state.versus?.locked) renderStats();
 }, 250);
+
+// ---------------------------------------------------------------------------
+// 1v1: the board API used by js/net/versus.js
+
+const overlay = document.getElementById('board-overlay');
+
+const versus = createVersus({
+  startRound({ seed, difficulty, hints, controlMode, startsInMs, timeLimitSec, round, rounds }) {
+    const startPerf = performance.now() + startsInMs;
+    state.versus = { timeLimitSec, startPerf, locked: false };
+    state.hints = hints;
+    state.controlMode = controlMode;
+    view.setControlMode(controlMode);
+    hud.setVersus(true, { round, rounds });
+    newPuzzle({ seed, difficulty, versus: true });
+    state.startedAt = startPerf; // the round clock starts when the countdown ends
+    renderStats();
+  },
+  syncBoard(board, moves) {
+    state.board = board;
+    state.history = [];
+    state.moves = moves;
+    update({ animate: false });
+  },
+  lockBoard() {
+    if (!state.versus) return;
+    state.versus.locked = true;
+    view.setLocked(true);
+  },
+  endVersus() {
+    state.versus = null;
+    state.hints = loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1';
+    state.controlMode = loadSetting(KEYS.controls, UI.controlModeDefault);
+    view.setControlMode(state.controlMode);
+    hud.setVersus(false);
+    state.puzzle = null;
+    state.startedAt = null;
+    boardHost.hidden = true;
+    overlay.hidden = true;
+  },
+  showTitle: () => showHome(),
+  setOverlay(text) {
+    overlay.hidden = !text;
+    document.getElementById('board-overlay-text').textContent = text ?? '';
+  },
+  setOpponent: (info) => hud.setOpponent(info),
+});
 
 // ---------------------------------------------------------------------------
 // Screens: title (Solo / 1v1) and the game.
@@ -254,14 +319,15 @@ const home = createHome(document.getElementById('home'), {
     openMenu();
   },
   onVersus: () => {
-    toast.textContent = '1v1 is coming soon!';
-    toast.hidden = false;
+    showGame();
+    versus.open();
   },
 });
 
 document.getElementById('home-link').addEventListener('click', (e) => {
   e.preventDefault();
-  showHome();
+  if (versus.active) versus.requestLeave();
+  else showHome();
 });
 
 const params = new URLSearchParams(location.search);

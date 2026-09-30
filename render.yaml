@@ -1,0 +1,13 @@
+# Render blueprint: one Node web service serving the game and the 1v1 WebSocket rooms.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: jong-jumble
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

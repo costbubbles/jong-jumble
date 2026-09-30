@@ -265,27 +265,36 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 - Flow: the home screen shows on launch; **Solo** → game; **1v1** → "coming soon" until multiplayer exists.
   The in-game title returns home. Shared links with `?seed=` skip the home screen.
 
-## 7. Multiplayer: live head-to-head (`server/`, `js/net/`)
+## 7. Multiplayer: live head-to-head (`server/`, `js/net/`) ✅
 
-- `server/server.js`: Node + `ws`. It serves the static files and manages **rooms**.
-- **Host settings:** difficulty, match seed (empty = random), **rounds N**, **round time limit**,
-  **hints on/off**, **control mode** (shift / drag & drop) — all apply to both players.
-- **Flow:** the host creates a room → gets a room code → shares it → the opponent joins → the host configures
-  the match → both are ready → for each round r = 1..N the server sends `roundStart { round, seed, startAt }`, where
-  the round seed is derived from the match seed + r. Both players get the same puzzle, with a countdown before it starts.
-- **During a round:** the client sends every `move`. The server **replays it with the shared `js/core` modules**
-  (authoritative, prevents cheating) and uses its own clock. Opponent progress is broadcast as moves and
-  "solved / still playing" only. **No scores are shown during the match.** Neither player sees the other's board.
-- **Round end:** each player plays until they solve it or the time limit runs out. The round ends when both are
-  done. The server computes each round score with `computeScore` (0 if unsolved).
-- **Match end:** after **all N rounds** (there is no early finish, even if the result is already decided), reveal
-  a per-round score table plus the totals. The highest total wins. Offer a rematch.
-- **Messages (JSON):** `create`, `join {code}`, `configure {settings}`, `ready`, `roundStart`,
-  `move {move}`, `progress {player, moves, solved}`, `roundEnd {round}`,
-  `matchEnd {table, totals, winner}`, `leave`, `error`.
-- Reconnect (resume by room code + player token) is optional.
-
----
+- **Server:** `server/server.js` = static files + `ws` WebSocketServer on path `/ws` (16 KB max message,
+  30 s ping/pong heartbeat drops dead connections). All match rules live in `server/rooms.js`
+  (`createRoomManager({ now, schedule, cancel })`, transport-agnostic and unit-tested with a fake clock in
+  `tests/rooms.test.js`).
+- **Protocol:** `js/net/protocol.js` documents every message and holds `sanitizeSettings` / `sanitizeName`,
+  shared by client and server.
+- **Room flow:** host `create`s → 5-char code (no 0/O/1/I) → guest `join`s (case-insensitive) → host
+  `configure`s (difficulty, rounds 1/3/5/7/9, time per round 1-10 min, controls, hints, seed; any change
+  un-readies both) → both `ready` → match.
+- **Rounds:** round seed = `deriveSeed(matchSeed, r)`; matchSeed = host's seed or random. Server sends
+  `roundStart` with `startAt` + `serverNow` (clients convert to their own clock), a 3 s countdown
+  (`MULTIPLAYER.countdownSec`), then the time limit. Moves before `startAt` are ignored.
+- **Authoritative replay:** the client applies moves locally and sends them; the server applies the same move
+  to its copy (`applyMove`). An illegal move gets `sync { board, moves }` back. Undo = `undo` (counts as a
+  move). The server detects the solve itself.
+- **Hidden scores:** during the match clients only see `progress { player, moves, solved }`. A round ends when
+  both solved or time runs out (unsolved = 0). After `roundBreakSec` the next round starts; after the last one
+  the server sends `matchEnd` with the full table (score, moves, seconds, points per round), totals and winner.
+  Ties: `MULTIPLAYER.tiebreak` ('fewerSeconds' = less total time; unsolved rounds count as the full limit).
+- **Leaving:** leaving or disconnecting mid-match forfeits (the opponent wins, `forfeit: true`). The room
+  survives with the remaining player (who becomes host); an empty room is deleted. After a match, Rematch
+  = ready again in the same room.
+- **Client:** `js/net/versus.js` (dialogs: connect → lobby; leave confirm; results) drives the shared board
+  through a small `game` API in `js/main.js` (startRound / syncBoard / lockBoard / endVersus / overlays).
+  In a round: Menu becomes **Leave**, Restart/New are hidden, the clock counts down, the top bar shows the
+  match round and the opponent's moves / solved state, and a board overlay shows the countdown and
+  "Solved! Waiting for …". Hints and controls come from the host's settings (not saved as your own).
+- Not implemented: reconnecting to a running match after a disconnect.
 
 ## 8. File layout
 
@@ -308,8 +317,10 @@ js/ui/hud.js                 # top bar, setup / help / win dialogs
 js/ui/home.js                # home screen: title, Solo/1v1, animated perspective wall
 assets/home/*.png            # title / label / icon art extracted from the home mockup, logo.png
 assets/fonts/                # Silkscreen pixel font (OFL)
-js/net/client.js             # WebSocket client + lobby UI
-server/server.js             # static server + rooms + authoritative replay
+js/net/protocol.js           # 1v1 message list + settings/name sanitizing (shared)
+js/net/versus.js             # 1v1 client: connection, lobby, rounds, results
+server/server.js             # static server + WebSocket endpoint /ws
+server/rooms.js              # 1v1 rooms, rounds, authoritative replay, scoring
 tests/*.test.js              # node --test
 package.json                 # "ws" dependency, scripts: start, test
 ```
@@ -329,18 +340,19 @@ package.json                 # "ws" dependency, scripts: start, test
 4. ✅ **HUD / QoL:** `js/ui/hud.js` + `js/main.js`: moves, timer, undo, Restart, New/Reset, hints toggle
    (localStorage), row status, scoring, win dialog with share link.
 5. ✅ **Art:** all sprites wired in, red fives included.
-6. **Multiplayer:** server, rooms, host settings, best-of-N rounds with time limits, authoritative replay,
-   hidden scores, end-of-match reveal.
+6. ✅ **Multiplayer:** server, rooms, host settings, best-of-N rounds with time limits, authoritative replay,
+   hidden scores, end-of-match reveal, forfeit, rematch. `tests/rooms.test.js` covers the room logic.
 7. **Polish:** sound, mobile layout, touch controls, tuning scramble depth.
 
 ## 10. Commands
-- Play: `npm start` → http://localhost:8080. `server/server.js` is a zero-dependency static server (reads `PORT`)
-  that gets WebSocket rooms in phase 6. Any static server also works; ES modules don't work over `file://`.
+- Play: `npm install` once, then `npm start` → http://localhost:8080 (static files + 1v1 on `/ws`, reads `PORT`).
+  Single player also works from any static server; ES modules don't work over `file://`.
 - Tests: `npm test` (`node --test "tests/**/*.test.js"`). Run them after any change in `js/core/` or `js/config.js`.
 
 ## 11. Repo and deploy
 - Git, branch `main`. Keep the repo root deployable as-is: no build step, and no generated files committed.
-- SP-only deploy: static hosting of the repo root. Full deploy: one Node web service running `npm start`.
+- Full deploy: one Node web service (`npm install`, `npm start`); `render.yaml` is a ready Render blueprint.
+  SP-only deploy: static hosting of the repo root (1v1 then unavailable).
 - See README.md for details.
 
 ## 12. Open questions / tuning
