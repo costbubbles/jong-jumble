@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Jong Jumble</title>
   <link rel="icon" href="sprites/Red.png">
+  <link rel="preload" href="assets/fonts/silkscreen-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
   <script type="module" src="js/main.js"></script>
 </head>
@@ -29,66 +30,91 @@
     </div>
   </section>
 
-  <div id="game">
-  <header class="topbar">
-    <h1><a href="./" id="home-link" title="Back to the home screen">Jong Jumble</a></h1>
-    <form id="seed-form" class="controls">
-      <label>Seed <input id="seed-input" placeholder="random" autocomplete="off" maxlength="32" spellcheck="false"></label>
-      <label>Difficulty <select id="difficulty"></select></label>
-      <button type="submit" class="primary">Play</button>
-    </form>
-  </header>
-
-  <main>
-    <section class="hud">
+  <div id="game" hidden>
+    <header class="topbar">
+      <a href="./" id="home-link" class="logo" title="Back to the title screen">
+        <img src="assets/home/logo.png" alt="Jong Jumble">
+      </a>
+      <div class="topbar-menu">
+        <button id="menu-btn" type="button" class="tile-btn">Menu</button>
+        <button id="help-btn" type="button" class="tile-btn">How to play</button>
+      </div>
       <div class="stats">
-        <div class="stat"><span class="label">Round</span><span id="round-wind">–</span></div>
+        <div class="stat"><span class="label">Round</span><span id="round-wind">-</span></div>
         <div class="stat"><span class="label">Moves</span><span id="moves">0</span></div>
         <div class="stat"><span class="label">Time</span><span id="time">0:00</span></div>
-        <div class="stat"><span class="label">Seed</span><span id="seed-display">–</span></div>
+        <div class="stat"><span class="label">Seed</span><span id="seed-display">-</span></div>
       </div>
-      <div class="buttons">
-        <button id="undo" type="button" title="Undo (Ctrl+Z). Counts as a move.">Undo</button>
-        <button id="restart" type="button" title="Back to the scrambled start of this puzzle">Restart</button>
-        <button id="new" type="button">New puzzle</button>
-        <label class="toggle"><input type="checkbox" id="hints"> Hints</label>
-        <label class="toggle" title="Shift: arrows, WASD, or drag a tile to rotate its row/column.&#10;Drag &amp; drop: click tiles to select an adjacent run, then drag it to another row (swap) or within its row (reorder).">
-          Controls
-          <select id="control-mode">
-            <option value="shift">Shift</option>
-            <option value="drop">Drag &amp; drop</option>
-          </select>
-        </label>
+      <div class="actions">
+        <button id="undo" type="button" class="tile-btn" title="Undo (Ctrl+Z). Counts as a move.">Undo</button>
+        <button id="restart" type="button" class="tile-btn" title="Back to the scrambled start of this puzzle">Restart</button>
+        <button id="new" type="button" class="tile-btn">New</button>
       </div>
-    </section>
+    </header>
 
-    <div id="board-host" class="board-host"></div>
-
-    <details class="help">
-      <summary>How to play</summary>
-      <ul>
-        <li><strong>Shift controls:</strong> arrows rotate a row left/right or a column up/down (tiles wrap
-          around). Or drag a tile, or hover it and press <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys.</li>
-        <li><strong>Drag &amp; drop controls</strong> (Controls menu): click tiles to select an adjacent run in one
-          row, then drag it onto another row to swap, or elsewhere in its row to reorder.</li>
-        <li>Make <strong>every row</strong> a winning riichi hand, read left to right: sequences ascending
-          (4-5-6), triplets any order, pairs side by side.</li>
-        <li>The red-outlined tile in the <strong>Win</strong> column is each row's winning tile. It never moves.
-          It completes the one unfinished group in its row, wherever that group is (e.g. 5-6 … → 4).
-          The rest of that group still has to be in order.</li>
-        <li>Grey, smaller tiles are <strong>open sets</strong> (pon/chii) and can't be split. A column
-          arrow on one moves all three columns, and it is blocked if another open set only partly overlaps.</li>
-        <li>Rows with no open sets count as riichi. Rows with an open set need a yaku (yakuhai, tanyao,
-          honitsu, toitoi, …). Each row has its own seat wind; the round wind is shared.</li>
-        <li>Boxes show valid groups: <span style="color:var(--box-pair)">pairs</span>,
-          <span style="color:var(--box-pon)">triplets</span>, <span style="color:var(--box-chi)">sequences</span>.
-          Bigger hands (more han) score more.</li>
-      </ul>
-    </details>
-  </main>
+    <main>
+      <div id="board-host" class="board-host"></div>
+    </main>
   </div>
 
-  <dialog id="win-dialog">
+  <!-- Solo setup: shown before the first board, and from the Menu button. -->
+  <dialog id="setup-dialog" class="tile-dialog">
+    <form id="setup-form">
+      <h2>Solo</h2>
+      <div class="field">
+        <label for="seed-input">Seed</label>
+        <input id="seed-input" placeholder="random" autocomplete="off" maxlength="32" spellcheck="false">
+      </div>
+      <div class="field">
+        <span class="field-label">Difficulty</span>
+        <div class="segmented" id="difficulty" role="radiogroup" aria-label="Difficulty"></div>
+      </div>
+      <div class="field">
+        <span class="field-label">Controls</span>
+        <div class="segmented" id="control-mode" role="radiogroup" aria-label="Controls">
+          <label><input type="radio" name="control-mode" value="shift"><span>Shift</span></label>
+          <label><input type="radio" name="control-mode" value="drop"><span>Drag &amp; drop</span></label>
+        </div>
+      </div>
+      <p class="field-note" id="control-note"></p>
+      <div class="field">
+        <span class="field-label">Hints</span>
+        <label class="check"><input type="checkbox" id="hints"><span>Show group boxes, shanten and win glow</span></label>
+      </div>
+      <div class="dialog-buttons">
+        <button type="button" id="setup-home" class="tile-btn">Title</button>
+        <button type="button" id="setup-resume" class="tile-btn" hidden>Resume</button>
+        <button type="submit" id="setup-play" class="tile-btn primary">Play</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="help-dialog" class="tile-dialog help-dialog">
+    <h2>How to play</h2>
+    <ul class="help-list">
+      <li>Make <strong>every row</strong> a winning riichi hand, read left to right: sequences ascending
+        (4-5-6), triplets in any order, pairs side by side.</li>
+      <li>The red-outlined tile in the <strong>Win</strong> column is each row's winning tile. It never moves.
+        It completes the one unfinished group in its row, wherever that group is (e.g. 5-6 &hellip; &rarr; 4).
+        That group's own tiles still have to be in order.</li>
+      <li><strong>Shift controls:</strong> arrows rotate a row left/right or a column up/down (tiles wrap
+        around). Or drag a tile, or hover it and press <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys.</li>
+      <li><strong>Drag &amp; drop controls:</strong> click tiles to select an adjacent run in one row, then drag it
+        onto another row to swap, or elsewhere in its row to reorder.</li>
+      <li>Grey, smaller tiles are <strong>open sets</strong> (pon/chii) and can't be split. A column arrow on one
+        moves all three columns, and it is blocked if another open set only partly overlaps.</li>
+      <li>Rows with no open sets count as riichi. Rows with an open set need a yaku (yakuhai, tanyao, honitsu,
+        toitoi, &hellip;). Each row has its own seat wind; the round wind is shared.</li>
+      <li>Boxes show valid groups: <span class="c-pair">pairs</span>, <span class="c-pon">triplets</span>,
+        <span class="c-chi">sequences</span>; <span class="c-win">red</span> = tiles the winning tile completes.
+        Bigger hands (more han) score more, and faster solves keep more of the points.</li>
+    </ul>
+    <div class="dialog-buttons">
+      <button type="button" id="help-close" class="tile-btn primary" autofocus>Got it</button>
+    </div>
+  </dialog>
+
+  <dialog id="win-dialog" class="tile-dialog">
     <h2>Solved!</h2>
     <p class="score"><span id="win-score">0</span><small>points</small></p>
     <dl class="win-stats">
@@ -99,11 +125,11 @@
     <ol id="win-yaku" class="win-yaku"></ol>
     <div class="share">
       <input id="share-link" readonly>
-      <button id="copy-link" type="button">Copy link</button>
+      <button id="copy-link" type="button" class="tile-btn">Copy link</button>
     </div>
     <div class="dialog-buttons">
-      <button id="win-close" type="button">Close</button>
-      <button id="win-new" type="button" class="primary">New puzzle</button>
+      <button id="win-close" type="button" class="tile-btn">Close</button>
+      <button id="win-new" type="button" class="tile-btn primary" autofocus>New puzzle</button>
     </div>
   </dialog>
 </body>

@@ -21,7 +21,7 @@ import { UI } from '../config.js';
 
 const ARROW_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 L21 11.5 H16 V21.5 H8 V11.5 H3 Z"/></svg>';
 const ARROW_SIZE = 40;
-const INFO_WIDTH = 118;
+const INFO_WIDTH = 150;
 const GAP = 0;       // space between tiles
 const ROW_GAP = 10;  // extra vertical space between rows (rows are separate hands)
 
@@ -72,9 +72,9 @@ export function createBoardView(host, { onMove }) {
 
   /** Playfield cell under a viewport point, or null (clamp = snap to the nearest cell instead). */
   function cellAt(clientX, clientY, clamp = false) {
-    const rect = tiles.getBoundingClientRect();
-    let col = Math.floor((clientX - rect.left) / metrics.stepX);
-    let row = Math.floor((clientY - rect.top) / metrics.stepY);
+    const rect = tiles.getBoundingClientRect(); // measure from inside the board's rim
+    let col = Math.floor((clientX - rect.left - tiles.clientLeft) / metrics.stepX);
+    let row = Math.floor((clientY - rect.top - tiles.clientTop) / metrics.stepY);
     if (clamp) {
       col = Math.min(board.cols - 1, Math.max(0, col));
       row = Math.min(board.cells.length - 1, Math.max(0, row));
@@ -255,10 +255,17 @@ export function createBoardView(host, { onMove }) {
 
   // ------------------------------------------------------------------ layout
 
+  /** Largest tile size that fits the host's width and the window's remaining height. */
   function computeMetrics() {
     const maxTile = 32 * UI.tileScale;
-    const avail = Math.max(320, host.clientWidth || window.innerWidth) - 2 * ARROW_SIZE - INFO_WIDTH - 48;
-    const tile = Math.max(24, Math.min(maxTile, Math.floor(avail / (board.cols + 1)) - GAP));
+    // 90 = grid gaps + board/win-column rims + the win column's margin
+    const availW = Math.max(320, host.clientWidth || window.innerWidth) - 2 * ARROW_SIZE - INFO_WIDTH - 90;
+    // Measure from the top of <main> (the board is centered inside it, so its own top moves).
+    const top = (host.closest('main') ?? host).getBoundingClientRect().top;
+    const availH = window.innerHeight - top - 2 * ARROW_SIZE - 48;
+    const byWidth = Math.floor(availW / (board.cols + 1)) - GAP;
+    const byHeight = Math.floor(availH / board.cells.length) - ROW_GAP - GAP;
+    const tile = Math.max(24, Math.min(maxTile, byWidth, byHeight));
     const stepX = tile + GAP;
     return { tile, stepX, stepY: stepX + ROW_GAP };
   }

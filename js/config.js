@@ -56,7 +56,7 @@ export const GENERATION = {
 // User interface
 // ---------------------------------------------------------------------------
 export const UI = {
-  tileScale: 2,          // sprites are 32×32; drawn at 32 × tileScale px
+  tileScale: 3,          // largest board tile = 32 × tileScale px (the board shrinks to fit the window)
   animationMs: 120,
   hintsDefault: true,    // row glow, shanten counter, "no yaku" marker, group boxes
   // 'shift' = arrows / drag to rotate rows and columns; 'drop' = select tiles and drag & drop them

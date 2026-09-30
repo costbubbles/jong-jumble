@@ -1,4 +1,8 @@
 // Single-player controller: owns the game state and wires the core logic to the view and HUD.
+//
+// Flow: title screen → Solo → setup dialog (seed, difficulty, controls, hints) → Play → board.
+// The Menu button reopens the setup dialog (timer paused) with Resume / New game.
+// Shared links (?seed=…&d=…) skip straight to the board.
 
 import { DIFFICULTIES, DEFAULT_DIFFICULTY, GENERATION, UI } from './config.js';
 import { generatePuzzle } from './core/generator.js';
@@ -10,22 +14,10 @@ import { createBoardView } from './ui/render.js';
 import { createHud } from './ui/hud.js';
 import { createHome } from './ui/home.js';
 
-const HINTS_KEY = 'mahjong-rows.hints';
-const CONTROLS_KEY = 'mahjong-rows.controls';
-
-const state = {
-  seed: '',
-  typed: false,        // true when the player chose the seed (New button then only resets)
-  difficulty: DEFAULT_DIFFICULTY,
-  puzzle: null,
-  board: null,
-  history: [],         // [{ board, move }] for undo
-  moves: 0,
-  startedAt: null,     // ms timestamp of the first move
-  solvedSeconds: null,
-  evals: [],
-  hints: loadHints(),
-  controlMode: loadSetting(CONTROLS_KEY, UI.controlModeDefault),
+const KEYS = {
+  hints: 'jong-jumble.hints',
+  controls: 'jong-jumble.controls',
+  difficulty: 'jong-jumble.difficulty',
 };
 
 function loadSetting(key, fallback) {
@@ -36,23 +28,38 @@ function saveSetting(key, value) {
   try { localStorage.setItem(key, value); } catch { /* storage unavailable */ }
 }
 
-function loadHints() {
-  try {
-    const v = localStorage.getItem(HINTS_KEY);
-    return v === null ? UI.hintsDefault : v === '1';
-  } catch {
-    return UI.hintsDefault;
-  }
-}
-
-function saveHints(on) {
-  try { localStorage.setItem(HINTS_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ }
-}
+const state = {
+  seed: '',
+  typed: false,        // true when the player chose the seed (New button then only resets)
+  difficulty: loadSetting(KEYS.difficulty, DEFAULT_DIFFICULTY),
+  puzzle: null,
+  board: null,
+  history: [],         // [{ board, move }] for undo
+  moves: 0,
+  startedAt: null,     // ms timestamp of the first move
+  pausedAt: null,      // ms timestamp when the menu paused the timer
+  solvedSeconds: null,
+  evals: [],
+  hints: loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1',
+  controlMode: loadSetting(KEYS.controls, UI.controlModeDefault),
+};
+if (!DIFFICULTIES[state.difficulty]) state.difficulty = DEFAULT_DIFFICULTY;
 
 const elapsed = () => {
   if (state.solvedSeconds !== null) return state.solvedSeconds;
-  return state.startedAt === null ? 0 : (performance.now() - state.startedAt) / 1000;
+  if (state.startedAt === null) return 0;
+  return ((state.pausedAt ?? performance.now()) - state.startedAt) / 1000;
 };
+
+function pauseTimer() {
+  if (state.startedAt !== null && !isSolved() && state.pausedAt === null) state.pausedAt = performance.now();
+}
+
+function resumeTimer() {
+  if (state.pausedAt === null) return;
+  state.startedAt += performance.now() - state.pausedAt;
+  state.pausedAt = null;
+}
 
 const shareLink = () => {
   const url = new URL(location.href);
@@ -72,8 +79,10 @@ function newPuzzle({ seed = '', difficulty = state.difficulty } = {}) {
   state.typed = seed !== '';
   state.seed = state.typed ? seed : randomSeed(GENERATION.randomSeedLength);
   state.difficulty = DIFFICULTIES[difficulty] ? difficulty : DEFAULT_DIFFICULTY;
+  saveSetting(KEYS.difficulty, state.difficulty);
   state.puzzle = generatePuzzle(state.seed, state.difficulty);
   hud.setPuzzle({ ...state, roundWind: state.puzzle.board.roundWind });
+  boardHost.hidden = false;
   syncUrl();
   restart();
 }
@@ -83,6 +92,7 @@ function restart() {
   state.history = [];
   state.moves = 0;
   state.startedAt = null;
+  state.pausedAt = null;
   state.solvedSeconds = null;
   hud.hideWin();
   update({ animate: false });
@@ -94,7 +104,7 @@ function isSolved() {
 
 /** Applies a move if legal. Returns true when the board changed. */
 function doMove(move) {
-  if (isSolved()) return false;
+  if (!state.puzzle || isSolved()) return false;
   const next = applyMove(state.board, move);
   if (!next) return false;
   state.history.push({ board: state.board, move });
@@ -113,6 +123,7 @@ function undo() {
 }
 
 function countMove() {
+  resumeTimer();
   state.moves++;
   if (state.startedAt === null) state.startedAt = performance.now();
 }
@@ -155,29 +166,37 @@ function renderStats() {
   });
 }
 
+function openMenu() {
+  pauseTimer();
+  hud.setSetupValues(state);
+  hud.openSetup({ canResume: !!state.puzzle && !isSolved() });
+}
+
 // ---------------------------------------------------------------------------
 
-const view = createBoardView(document.getElementById('board-host'), { onMove: doMove });
+const boardHost = document.getElementById('board-host');
+boardHost.hidden = true;
+const view = createBoardView(boardHost, { onMove: doMove });
 
 const hud = createHud({
-  onPlay: (seed, difficulty) => newPuzzle({ seed, difficulty }),
-  onDifficulty: (difficulty) => newPuzzle({ seed: state.typed ? state.seed : '', difficulty }),
+  onPlay: ({ seed, difficulty }) => newPuzzle({ seed, difficulty }),
+  onResume: resumeTimer,
+  onTitle: showHome,
+  onMenu: openMenu,
   onUndo: undo,
   onRestart: restart,
   onNew: () => (state.typed ? restart() : newPuzzle()),
   onControlMode: (mode) => {
     state.controlMode = mode;
-    saveSetting(CONTROLS_KEY, mode);
+    saveSetting(KEYS.controls, mode);
     view.setControlMode(mode);
   },
   onHints: (on) => {
     state.hints = on;
-    saveHints(on);
-    view.setRowStatus(state.evals, { hints: on });
+    saveSetting(KEYS.hints, on ? '1' : '0');
+    if (state.puzzle) view.setRowStatus(state.evals, { hints: on });
   },
 });
-hud.setHints(state.hints);
-hud.setControlMode(state.controlMode);
 view.setControlMode(state.controlMode);
 
 // Keyboard: Ctrl+Z undo; WASD / arrow keys shift the row or column of the tile under the mouse.
@@ -189,7 +208,7 @@ const KEY_MOVES = {
 };
 
 document.addEventListener('keydown', (e) => {
-  if (gameEl.hidden || e.target.closest('input, select, textarea, dialog')) return;
+  if (gameEl.hidden || !state.puzzle || e.target.closest('input, select, textarea, dialog')) return;
   const key = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && key === 'z') {
     e.preventDefault();
@@ -207,11 +226,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 setInterval(() => {
-  if (state.startedAt !== null && !isSolved()) renderStats();
+  if (state.startedAt !== null && !isSolved() && state.pausedAt === null) renderStats();
 }, 250);
 
 // ---------------------------------------------------------------------------
-// Screens: home (title + Solo / 1v1) and the game. Shared puzzle links skip the home screen.
+// Screens: title (Solo / 1v1) and the game.
 
 const gameEl = document.getElementById('game');
 const toast = document.querySelector('.home-toast');
@@ -223,13 +242,17 @@ function showGame() {
 }
 
 function showHome() {
+  pauseTimer();
   gameEl.hidden = true;
   toast.hidden = true;
   home.show();
 }
 
 const home = createHome(document.getElementById('home'), {
-  onSolo: showGame,
+  onSolo: () => {
+    showGame();
+    openMenu();
+  },
   onVersus: () => {
     toast.textContent = '1v1 is coming soon!';
     toast.hidden = false;
@@ -242,6 +265,9 @@ document.getElementById('home-link').addEventListener('click', (e) => {
 });
 
 const params = new URLSearchParams(location.search);
-newPuzzle({ seed: params.get('seed') ?? '', difficulty: params.get('d') ?? DEFAULT_DIFFICULTY });
-if (params.has('seed')) showGame();
-else showHome();
+if (params.has('seed')) {
+  showGame();
+  newPuzzle({ seed: params.get('seed'), difficulty: params.get('d') ?? state.difficulty });
+} else {
+  showHome();
+}

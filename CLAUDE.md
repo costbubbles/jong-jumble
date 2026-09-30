@@ -200,6 +200,20 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
 
 ## 6. UI (`index.html`, `css/`, `js/ui/`)
 
+**Look:** matches the title screen: white page, ink `#2a2a2a`, chun red `#c54749`, hatsu green, and "stretched
+tile" frames (4px gold rim `#baa30b` + grey inner rim `#bbb`) on buttons, inputs, dialogs and the board.
+Headings, buttons, labels and numbers use the self-hosted pixel font **Silkscreen** (`assets/fonts/`, OFL);
+body text stays in the system font for readability. Colors live as CSS variables at the top of `css/style.css`.
+
+**Flow** (`js/main.js`): title screen → **Solo** → **setup dialog** (seed, difficulty, controls, hints, Play) →
+board. Nothing is generated until Play. **Menu** reopens the setup dialog with Resume / New game (the timer is
+paused while it's open); **Title** / Esc (with no game) returns to the title screen. Shared `?seed=` links skip
+straight to the board. Last difficulty, controls and hints are remembered (localStorage `jong-jumble.*`).
+
+**Top bar:** logo (`assets/home/logo.png`, the title art; click = title screen), **Menu** and **How to play**
+(help dialog) next to it; then stats (round, moves, time, seed) and Undo / Restart / New (Reset for typed seeds).
+
+**Board:** as large as fits (up to 32 × `UI.tileScale` = 96 px tiles), centered in the space under the top bar.
 - Layout: left arrows | 13-column playfield (no gaps between tiles, small gap between rows) | **Win** column
   (fixed winning tiles, red outline, green when the row is solved) | right arrows | row info. Up/down arrows
   above/below each playfield column only.
@@ -212,8 +226,7 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
   row shows only its actual wait group.
 - Hovering an arrow highlights what will move. Blocked column arrows are grey and show the blocked columns.
 - **Keyboard:** hover a tile, then W/Up S/Down move its column, A/Left D/Right move its row. Ctrl+Z = undo.
-- **Control modes** (HUD "Controls" select, saved in localStorage, default `UI.controlModeDefault`; in MP the
-  host picks one mode for both players):
+- **Control modes** (setup dialog; in MP the host picks one mode for both players):
   - `shift`: arrows, keyboard, or **drag a tile**. The first direction dragged locks the axis, and each full tile
     dragged applies one row/column shift live (each counts as a move).
   - `drop`: arrows and keys disabled. Click tiles to build an adjacent selection in one row (clicking an open
@@ -222,14 +235,9 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
     closes). Target preview is green if legal, grey if it would split an open set (then it snaps back).
     Each drop = 1 move: `{ type: 'drop', from: { row, start, len }, to: { row, col } }` (see §3.1).
 - Beside each row: seat wind badge, then Tenpai / n-shanten / "Tiles OK, reorder" / "No yaku" / ✓ points
-  (yaku, han and fu on hover). The round wind is shown in the header.
-- **HUD:** seed field + difficulty selector, move counter, timer (starts on the first move), Undo.
-  - **Restart:** the same puzzle, back to its scrambled start (clears the move history, timer, and move count).
-  - **New / Reset:** if the seed was **random/empty**, roll a new seed and generate; if the user
-    **typed a seed**, behave like Restart.
-- **Win:** once all rows are solved, show a modal with the score (§6.1), moves, time, seed, and a share link.
-- **Hints toggle:** the row glow, shanten counter, and "no yaku" marker can be turned off (SP setting;
-  in MP the host decides).
+  (yaku, han and fu on hover).
+- **Win dialog:** score (§6.1), moves, time, seed, per-row points and yaku, share link.
+- Moves are animated with FLIP slides; wrapped tiles slide in from the edge.
 
 ### 6.1 Scoring (edit in `js/config.js` → `SCORING`; `js/core/scoring.js` only wraps it)
 ```
@@ -243,7 +251,6 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 - `computeScore({ startShanten[], handPoints[], moves, seconds, solved })` in `js/core/scoring.js` is the only
   caller. SP, MP clients, and the server all use it.
 - The URL carries `?seed=…&d=easy|medium|hard`.
-- Moves are animated with FLIP slides; wrapped tiles slide in from the edge.
 
 ---
 
@@ -297,9 +304,10 @@ js/core/points.js            # han / fu / tsumo points
 js/core/generator.js         # solved board + scramble
 js/core/scoring.js           # computeScore (wraps config SCORING)
 js/ui/render.js              # DOM board, arrows, chains, animations
-js/ui/hud.js                 # seed/difficulty, counters, buttons, win modal
+js/ui/hud.js                 # top bar, setup / help / win dialogs
 js/ui/home.js                # home screen: title, Solo/1v1, animated perspective wall
-assets/home/*.png            # title / label / icon art extracted from the home mockup
+assets/home/*.png            # title / label / icon art extracted from the home mockup, logo.png
+assets/fonts/                # Silkscreen pixel font (OFL)
 js/net/client.js             # WebSocket client + lobby UI
 server/server.js             # static server + rooms + authoritative replay
 tests/*.test.js              # node --test

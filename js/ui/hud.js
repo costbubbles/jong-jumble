@@ -1,4 +1,5 @@
-// HUD: binds the static controls in index.html (seed form, stats, buttons, win dialog).
+// HUD: binds the static controls in index.html: top bar (stats, Undo/Restart/New, Menu, How to play),
+// the Solo setup dialog, the help dialog and the win dialog.
 
 import { DIFFICULTIES } from '../config.js';
 import { TILE_NAMES } from '../core/tiles.js';
@@ -10,33 +11,64 @@ export function formatTime(seconds) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+const CONTROL_NOTES = {
+  shift: 'Arrows, WASD, or drag a tile to rotate its row or column.',
+  drop: 'Click tiles to select a run, then drag it to another row (swap) or along its row (reorder).',
+};
+
 /**
- * handlers: { onPlay(seedText, difficulty), onDifficulty(difficulty), onUndo(), onRestart(),
- *             onNew(), onHints(bool), onControlMode('shift' | 'drop') }
+ * handlers: {
+ *   onPlay({ seed, difficulty }), onResume(), onTitle(), onMenu(),
+ *   onUndo(), onRestart(), onNew(), onHints(bool), onControlMode('shift' | 'drop'),
+ * }
  */
 export function createHud(handlers) {
+  // ------------------------------------------------------------------ setup dialog
+  const setup = $('setup-dialog');
   const difficulty = $('difficulty');
   for (const [key, d] of Object.entries(DIFFICULTIES)) {
-    const opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = `${d.label} (${d.rows} rows)`;
-    difficulty.appendChild(opt);
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="radio" name="difficulty" value="${key}"><span>${d.label}<small>${d.rows} rows</small></span>`;
+    difficulty.appendChild(label);
   }
+  const radioValue = (name) => setup.querySelector(`input[name="${name}"]:checked`)?.value;
+  const setRadio = (name, value) => {
+    const input = setup.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (input) input.checked = true;
+  };
 
-  $('seed-form').addEventListener('submit', (e) => {
+  $('setup-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    handlers.onPlay($('seed-input').value.trim(), difficulty.value);
+    setup.close();
+    handlers.onPlay({ seed: $('seed-input').value.trim(), difficulty: radioValue('difficulty') });
   });
-  difficulty.addEventListener('change', () => handlers.onDifficulty(difficulty.value));
+  $('setup-resume').addEventListener('click', () => { setup.close(); handlers.onResume(); });
+  $('setup-home').addEventListener('click', () => { setup.close(); handlers.onTitle(); });
+  // Esc: resume if there is a game to go back to, otherwise back to the title screen.
+  setup.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    setup.close();
+    if ($('setup-resume').hidden) handlers.onTitle();
+    else handlers.onResume();
+  });
+  setup.querySelectorAll('input[name="control-mode"]').forEach((input) => input.addEventListener('change', () => {
+    $('control-note').textContent = CONTROL_NOTES[input.value];
+    handlers.onControlMode(input.value);
+  }));
+  $('hints').addEventListener('change', (e) => handlers.onHints(e.target.checked));
+
+  // ------------------------------------------------------------------ top bar
+  $('menu-btn').addEventListener('click', handlers.onMenu);
+  $('help-btn').addEventListener('click', () => $('help-dialog').showModal());
+  $('help-close').addEventListener('click', () => $('help-dialog').close());
   $('undo').addEventListener('click', handlers.onUndo);
   $('restart').addEventListener('click', handlers.onRestart);
   $('new').addEventListener('click', handlers.onNew);
-  $('hints').addEventListener('change', (e) => handlers.onHints(e.target.checked));
-  $('control-mode').addEventListener('change', (e) => handlers.onControlMode(e.target.value));
 
-  const dialog = $('win-dialog');
-  $('win-close').addEventListener('click', () => dialog.close());
-  $('win-new').addEventListener('click', () => { dialog.close(); handlers.onNew(); });
+  // ------------------------------------------------------------------ win dialog
+  const win = $('win-dialog');
+  $('win-close').addEventListener('click', () => win.close());
+  $('win-new').addEventListener('click', () => { win.close(); handlers.onNew(); });
   $('copy-link').addEventListener('click', async () => {
     const input = $('share-link');
     try {
@@ -49,14 +81,26 @@ export function createHud(handlers) {
   });
 
   return {
-    setPuzzle({ seed, typed, difficulty: diff, roundWind }) {
-      difficulty.value = diff;
+    /** Open the Solo setup. canResume shows "Resume" (a puzzle is in progress). */
+    openSetup({ canResume }) {
+      $('setup-resume').hidden = !canResume;
+      $('setup-play').textContent = canResume ? 'New game' : 'Play';
+      if (!setup.open) setup.showModal();
+      $('setup-play').focus();
+    },
+    setSetupValues({ seed, typed, difficulty: diff, controlMode, hints }) {
       $('seed-input').value = typed ? seed : '';
+      setRadio('difficulty', diff);
+      setRadio('control-mode', controlMode);
+      $('control-note').textContent = CONTROL_NOTES[controlMode] ?? '';
+      $('hints').checked = hints;
+    },
+    setPuzzle({ seed, typed, roundWind }) {
       $('seed-display').textContent = seed;
       $('round-wind').textContent = TILE_NAMES[roundWind];
-      $('new').textContent = typed ? 'Reset' : 'New puzzle';
+      $('new').textContent = typed ? 'Reset' : 'New';
       $('new').title = typed
-        ? 'Typed seed: resets to the start of this puzzle. Clear the seed box and press Play for a random one.'
+        ? 'Typed seed: resets to the start of this puzzle. Use Menu to pick another seed.'
         : 'Generate a new random puzzle';
     },
     setStats({ moves, seconds, canUndo, solved }) {
@@ -64,8 +108,6 @@ export function createHud(handlers) {
       $('time').textContent = formatTime(seconds);
       $('undo').disabled = !canUndo || solved;
     },
-    setHints(on) { $('hints').checked = on; },
-    setControlMode(mode) { $('control-mode').value = mode; },
     /** rows: evaluateRow results for the solved board. */
     showWin({ score, moves, seconds, seed, link, rows }) {
       $('win-score').textContent = score.toLocaleString();
@@ -73,8 +115,7 @@ export function createHud(handlers) {
       $('win-time').textContent = formatTime(seconds);
       $('win-seed').textContent = seed;
       $('share-link').value = link;
-      const list = $('win-yaku');
-      list.replaceChildren(...rows.map((r) => {
+      $('win-yaku').replaceChildren(...rows.map((r) => {
         const li = document.createElement('li');
         const head = document.createElement('strong');
         head.textContent = `${r.points.toLocaleString()} pts`;
@@ -82,8 +123,8 @@ export function createHud(handlers) {
         li.append(head, detail + r.yakuHan.map((y) => `${y.name} ${y.han}`).join(', '));
         return li;
       }));
-      dialog.showModal();
+      win.showModal();
     },
-    hideWin() { if (dialog.open) dialog.close(); },
+    hideWin() { if (win.open) win.close(); },
   };
 }
