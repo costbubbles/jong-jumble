@@ -203,7 +203,8 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
 - Layout: left arrows | 13-column playfield (no gaps between tiles, small gap between rows) | **Win** column
   (fixed winning tiles, red outline, green when the row is solved) | right arrows | row info. Up/down arrows
   above/below each playfield column only.
-- Open sets ("locked"): greyer and smaller (`--locked-scale` in CSS), one tile rotated sideways.
+- Open sets ("locked"): greyer, one tile rotated sideways (clockwise). The 3 tiles shrink as one group
+  (`--locked-scale` in CSS) so they touch each other but not the neighbouring tiles.
 - **Group boxes** (hints on): pair yellow, triplet green, sequence blue; dashed = the wait group.
 - **Wait boxes** (hints on): a red box around each partial group the row's winning tile would complete
   (`findWaitGroups` → `evaluateRow().waits`: an adjacent pair of it, a lone copy, or two adjacent ascending

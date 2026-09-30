@@ -337,6 +337,9 @@ export function createBoardView(host, { onMove }) {
       t.style.top = `${r * metrics.stepY + ROW_GAP / 2}px`;
       t.classList.toggle('locked', !!cell.chain);
       t.classList.toggle('sideways', !!cell.sideways);
+      // Position inside the open set (0, 1, 2) so the set shrinks as one group and stays touching.
+      const pos = !cell.chain ? -1 : row[c - 1]?.chain !== cell.chain ? 0 : row[c - 2]?.chain !== cell.chain ? 1 : 2;
+      t.style.setProperty('--chain-shift', pos < 0 ? 0 : 1 - pos);
       t.classList.remove('dragging');
       t.style.transform = '';
     }));

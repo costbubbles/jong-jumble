@@ -8,7 +8,7 @@
   --box-pair: #ffd23f;
   --box-pon: #3ddc84;
   --box-chi: #4d8dff;
-  --locked-scale: 0.84;
+  --locked-scale: 0.9;
   --solved: #3ddc84;
   --warn: #f4a261;
   --agari: #e63946;
@@ -193,13 +193,16 @@ main { padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
 .win-tile.solved img, .win-tile.solved .fallback { outline-color: var(--solved); }
 
 
-/* Locked = open set (chain): greyer and smaller, one tile turned sideways like a called meld. */
+/* Locked = open set (chain): greyer and a little smaller, one tile turned sideways like a called meld.
+   The 3 tiles shrink as one group around the middle tile (--chain-shift = 1, 0, -1 from render.js),
+   so they keep touching each other but leave a gap to the neighbouring tiles. */
 .tile.locked img, .tile.locked .fallback {
-  transform: scale(var(--locked-scale));
+  --chain-offset: calc(var(--chain-shift, 0) * (1 - var(--locked-scale)) * var(--tile));
+  transform: translateX(var(--chain-offset)) scale(var(--locked-scale));
   filter: grayscale(0.55) brightness(0.78);
 }
 .tile.locked.sideways img, .tile.locked.sideways .fallback {
-  transform: rotate(90deg) scale(var(--locked-scale));
+  transform: translateX(var(--chain-offset)) rotate(90deg) scale(var(--locked-scale));
 }
 
 /* Pointer controls */
