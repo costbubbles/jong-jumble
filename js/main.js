@@ -20,6 +20,7 @@ const KEYS = {
   hints: 'jong-jumble.hints',
   controls: 'jong-jumble.controls',
   difficulty: 'jong-jumble.difficulty',
+  order: 'jong-jumble.order',
 };
 
 function loadSetting(key, fallback) {
@@ -44,6 +45,7 @@ const state = {
   evals: [],
   hints: loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1',
   controlMode: loadSetting(KEYS.controls, UI.controlModeDefault),
+  requireOrder: loadSetting(KEYS.order, UI.requireOrderDefault ? 'sorted' : 'any') !== 'any',
   // 1v1 round in progress: { timeLimitSec, startPerf, locked } (null in solo)
   versus: null,
 };
@@ -65,29 +67,37 @@ function resumeTimer() {
   state.pausedAt = null;
 }
 
+/** Win rules for the current game (see evaluateRow in core/yaku.js). */
+const rules = () => ({ requireOrder: state.requireOrder });
+
 const shareLink = () => {
   const url = new URL(location.href);
-  url.search = new URLSearchParams({ seed: state.seed, d: state.difficulty }).toString();
+  const params = new URLSearchParams({ seed: state.seed, d: state.difficulty });
+  if (!state.requireOrder) params.set('order', 'any');
+  url.search = params.toString();
   return url.toString();
 };
 
 function syncUrl() {
   const params = new URLSearchParams({ d: state.difficulty });
   if (state.typed) params.set('seed', state.seed);
+  if (!state.requireOrder) params.set('order', 'any');
   history.replaceState(null, '', `?${params}`);
 }
 
 // ---------------------------------------------------------------------------
 
-function newPuzzle({ seed = '', difficulty = state.difficulty, versus = false } = {}) {
+function newPuzzle({ seed = '', difficulty = state.difficulty, requireOrder = state.requireOrder, versus = false } = {}) {
   state.typed = seed !== '';
   state.seed = state.typed ? seed : randomSeed(GENERATION.randomSeedLength);
   state.difficulty = DIFFICULTIES[difficulty] ? difficulty : DEFAULT_DIFFICULTY;
-  state.puzzle = generatePuzzle(state.seed, state.difficulty);
+  state.requireOrder = requireOrder;
+  state.puzzle = generatePuzzle(state.seed, state.difficulty, rules());
   hud.setPuzzle({ ...state, roundWind: state.puzzle.board.roundWind });
   boardHost.hidden = false;
   if (!versus) {
     saveSetting(KEYS.difficulty, state.difficulty);
+    saveSetting(KEYS.order, state.requireOrder ? 'sorted' : 'any');
     syncUrl();
   }
   restart();
@@ -142,7 +152,7 @@ function countMove() {
 }
 
 function update({ move = null, animate }) {
-  state.evals = evaluateBoard(state.board);
+  state.evals = evaluateBoard(state.board, rules());
   view.setBoard(state.board, { move, animate });
   view.setRowStatus(state.evals, { hints: state.hints });
 
@@ -197,7 +207,7 @@ boardHost.hidden = true;
 const view = createBoardView(boardHost, { onMove: doMove });
 
 const hud = createHud({
-  onPlay: ({ seed, difficulty }) => newPuzzle({ seed, difficulty }),
+  onPlay: ({ seed, difficulty, requireOrder }) => newPuzzle({ seed, difficulty, requireOrder }),
   onResume: resumeTimer,
   onTitle: showHome,
   onMenu: () => (versus.active ? versus.requestLeave() : openMenu()),
@@ -253,14 +263,14 @@ setInterval(() => {
 const overlay = document.getElementById('board-overlay');
 
 const versus = createVersus({
-  startRound({ seed, difficulty, hints, controlMode, startsInMs, timeLimitSec, round, rounds }) {
+  startRound({ seed, difficulty, hints, controlMode, requireOrder, startsInMs, timeLimitSec, round, rounds }) {
     const startPerf = performance.now() + startsInMs;
     state.versus = { timeLimitSec, startPerf, locked: false };
     state.hints = hints;
     state.controlMode = controlMode;
     view.setControlMode(controlMode);
     hud.setVersus(true, { round, rounds });
-    newPuzzle({ seed, difficulty, versus: true });
+    newPuzzle({ seed, difficulty, requireOrder, versus: true });
     state.startedAt = startPerf; // the round clock starts when the countdown ends
     renderStats();
   },
@@ -279,6 +289,7 @@ const versus = createVersus({
     state.versus = null;
     state.hints = loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1';
     state.controlMode = loadSetting(KEYS.controls, UI.controlModeDefault);
+    state.requireOrder = loadSetting(KEYS.order, UI.requireOrderDefault ? 'sorted' : 'any') !== 'any';
     view.setControlMode(state.controlMode);
     hud.setVersus(false);
     state.puzzle = null;
@@ -333,7 +344,11 @@ document.getElementById('home-link').addEventListener('click', (e) => {
 const params = new URLSearchParams(location.search);
 if (params.has('seed')) {
   showGame();
-  newPuzzle({ seed: params.get('seed'), difficulty: params.get('d') ?? state.difficulty });
+  newPuzzle({
+    seed: params.get('seed'),
+    difficulty: params.get('d') ?? state.difficulty,
+    requireOrder: params.get('order') !== 'any',
+  });
 } else {
   showHome();
 }

@@ -61,6 +61,8 @@ export const UI = {
   hintsDefault: true,    // row glow, shanten counter, "no yaku" marker, group boxes
   // 'shift' = arrows / drag to rotate rows and columns; 'drop' = select tiles and drag & drop them
   controlModeDefault: 'shift',
+  // true = a row only wins with its tiles in left-to-right order; false = any order of a winning hand
+  requireOrderDefault: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -83,6 +85,7 @@ export const MULTIPLAYER = {
   timeLimitOptions: [60, 120, 180, 300, 600],
   hints: true,
   controlMode: 'shift',
+  requireOrder: true,
   countdownSec: 3,        // "3, 2, 1" before each round
   roundBreakSec: 4,       // pause between rounds
   // Tie in match totals: 'fewerSeconds' (less total solve time wins), or 'draw'.

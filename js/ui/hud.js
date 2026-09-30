@@ -18,7 +18,7 @@ const CONTROL_NOTES = {
 
 /**
  * handlers: {
- *   onPlay({ seed, difficulty }), onResume(), onTitle(), onMenu(),
+ *   onPlay({ seed, difficulty, requireOrder }), onResume(), onTitle(), onMenu(),
  *   onUndo(), onRestart(), onNew(), onHints(bool), onControlMode('shift' | 'drop'),
  * }
  */
@@ -40,7 +40,11 @@ export function createHud(handlers) {
   $('setup-form').addEventListener('submit', (e) => {
     e.preventDefault();
     setup.close();
-    handlers.onPlay({ seed: $('seed-input').value.trim(), difficulty: radioValue('difficulty') });
+    handlers.onPlay({
+      seed: $('seed-input').value.trim(),
+      difficulty: radioValue('difficulty'),
+      requireOrder: radioValue('order') !== 'any',
+    });
   });
   $('setup-resume').addEventListener('click', () => { setup.close(); handlers.onResume(); });
   $('setup-home').addEventListener('click', () => { setup.close(); handlers.onTitle(); });
@@ -88,9 +92,10 @@ export function createHud(handlers) {
       if (!setup.open) setup.showModal();
       $('setup-play').focus();
     },
-    setSetupValues({ seed, typed, difficulty: diff, controlMode, hints }) {
+    setSetupValues({ seed, typed, difficulty: diff, controlMode, hints, requireOrder }) {
       $('seed-input').value = typed ? seed : '';
       setRadio('difficulty', diff);
+      setRadio('order', requireOrder ? 'sorted' : 'any');
       setRadio('control-mode', controlMode);
       $('control-note').textContent = CONTROL_NOTES[controlMode] ?? '';
       $('hints').checked = hints;

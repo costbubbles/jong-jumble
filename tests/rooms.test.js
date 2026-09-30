@@ -65,12 +65,16 @@ test('create, join, and host-only settings', () => {
 
   guest.send('configure', { settings: { rounds: 5 } });
   assert.match(guest.last('error').message, /host/);
-  host.send('configure', { settings: { rounds: 5, difficulty: 'hard', timeLimitSec: 99999, controlMode: 'drop' } });
+  host.send('configure', { settings: { rounds: 5, difficulty: 'hard', timeLimitSec: 99999, controlMode: 'drop', requireOrder: false } });
   const s = guest.last('room').settings;
   assert.equal(s.rounds, 5);
   assert.equal(s.difficulty, 'hard');
   assert.equal(s.timeLimitSec, MULTIPLAYER.roundTimeLimitSec); // not an allowed option: unchanged
   assert.equal(s.controlMode, 'drop');
+  assert.equal(s.requireOrder, false);
+  host.send('ready', { ready: true });
+  guest.send('ready', { ready: true });
+  assert.equal(guest.last('roundStart').requireOrder, false);
 
   const third = env.player();
   third.send('join', { code: host.last('joined').code, name: 'X' });

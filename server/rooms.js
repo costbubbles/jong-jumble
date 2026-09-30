@@ -67,7 +67,8 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
     clearTimer(room);
     room.round++;
     const seed = deriveSeed(room.matchSeed, room.round);
-    room.puzzle = generatePuzzle(seed, room.settings.difficulty);
+    room.rules = { requireOrder: room.settings.requireOrder };
+    room.puzzle = generatePuzzle(seed, room.settings.difficulty, room.rules);
     room.startAt = now() + MULTIPLAYER.countdownSec * 1000;
     room.phase = 'playing';
     for (const p of room.players) {
@@ -84,6 +85,7 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
       timeLimitSec: room.settings.timeLimitSec,
       hints: room.settings.hints,
       controlMode: room.settings.controlMode,
+      requireOrder: room.settings.requireOrder,
     });
     room.timer = schedule(() => endRound(room),
       MULTIPLAYER.countdownSec * 1000 + room.settings.timeLimitSec * 1000);
@@ -93,7 +95,7 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
     const g = p.game;
     const solved = g.solvedAt !== null;
     const seconds = solved ? (g.solvedAt - room.startAt) / 1000 : room.settings.timeLimitSec;
-    const handPoints = solved ? evaluateBoard(g.board).map((e) => e.points) : [];
+    const handPoints = solved ? evaluateBoard(g.board, room.rules).map((e) => e.points) : [];
     return {
       solved,
       moves: g.moves,
@@ -249,7 +251,7 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
     function afterMove(room) {
       const g = client.game;
       g.moves++;
-      if (evaluateBoard(g.board).every((e) => e.solved)) g.solvedAt = now();
+      if (evaluateBoard(g.board, room.rules).every((e) => e.solved)) g.solvedAt = now();
       broadcast(room, {
         type: 'progress', player: room.players.indexOf(client), moves: g.moves, solved: g.solvedAt !== null,
       });

@@ -141,7 +141,7 @@ export function generateSolvedBoard(rng, difficulty) {
   };
 }
 
-export function scrambleBoard(rng, board, count) {
+export function scrambleBoard(rng, board, count, rules) {
   const moves = [];
   const step = () => {
     const last = moves[moves.length - 1];
@@ -152,27 +152,29 @@ export function scrambleBoard(rng, board, count) {
   };
   for (let i = 0; i < count; i++) step();
   for (let extra = 0; extra < GENERATION.maxExtraScrambleMoves; extra++) {
-    if (!evaluateBoard(board).some((e) => e.solved)) break;
+    if (!evaluateBoard(board, rules).some((e) => e.solved)) break;
     step();
   }
   return { board, moves };
 }
 
 /**
- * Deterministic puzzle for (seed, difficulty).
+ * Deterministic puzzle for (seed, difficulty, rules). rules = { requireOrder } (see yaku.js); the
+ * scramble keeps going until no row is already solved under those rules.
  * Returns { seed, difficulty, solved, board, scramble, startShanten }.
  */
-export function generatePuzzle(seed, difficulty) {
+export function generatePuzzle(seed, difficulty, rules = { requireOrder: true }) {
   if (!DIFFICULTIES[difficulty]) throw new Error(`Unknown difficulty "${difficulty}"`);
   const rng = createRng(`${seed}|${difficulty}`);
   const solved = generateSolvedBoard(rng, difficulty);
-  const { board, moves } = scrambleBoard(rng, solved, DIFFICULTIES[difficulty].scrambleMoves);
+  const { board, moves } = scrambleBoard(rng, solved, DIFFICULTIES[difficulty].scrambleMoves, rules);
   return {
     seed,
     difficulty,
     solved,
     board,
     scramble: moves,
-    startShanten: evaluateBoard(board).map((e) => e.shanten),
+    rules,
+    startShanten: evaluateBoard(board, rules).map((e) => e.shanten),
   };
 }

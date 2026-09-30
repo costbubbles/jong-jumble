@@ -118,3 +118,34 @@ test('incomplete hands report shanten', () => {
   assert.equal(e.complete, false);
   assert.equal(e.shanten, 1);
 });
+
+// ---------------------------------------------------------------------------
+// "Any order" rule: { requireOrder: false }
+// ---------------------------------------------------------------------------
+
+const rowAny = (notation, seatWind = '1z', roundWind = '1z') =>
+  evaluateRow(createBoard({ rows: [notation], roundWind, seatWinds: [seatWind] }), 0, { requireOrder: false });
+
+test('any-order rule: a shuffled winning row wins with the same value', () => {
+  const sorted = row('123s 05s 78p 123m 444m 9p');
+  const shuffled = '4m 7p 1s 2m 5s 3s 4m 0s 1m 8p 2s 3m 4m 9p';
+  assert.equal(row(shuffled).status, 'reorder');
+  const any = rowAny(shuffled);
+  assert.equal(any.status, 'solved');
+  assert.deepEqual([any.han, any.fu, any.points], [sorted.han, sorted.fu, sorted.points]);
+  // Out-of-order sequences are fine too
+  assert.equal(rowAny('123s 05s 87p 123m 444m 9p').status, 'solved');
+});
+
+test('any-order rule: wait type is inferred for fu (pinfu needs a ryanmen reading)', () => {
+  const p = rowAny('3s 456p 55m 2s 789s 123m 4s', '2z');
+  assert.ok(p.yaku.includes('Pinfu'));
+  assert.deepEqual([p.han, p.fu, p.points], [3, 20, 2700]);
+});
+
+test('any-order rule: yaku and open sets still apply', () => {
+  assert.equal(rowAny('406s 345p 99p 56m [222z] 4m', '1z').status, 'noyaku');
+  assert.equal(rowAny('0s 4s 9p 6s 345p 9p 56m [222z] 4m', '2z').status, 'solved');
+  assert.equal(rowAny('123m 456p 789s 1122z 5z').status, 'shanten');
+  assert.equal(rowAny('1m 33m 55m 1m 77m 99m 11z 2z 2z').status, 'solved'); // chiitoitsu, any order
+});

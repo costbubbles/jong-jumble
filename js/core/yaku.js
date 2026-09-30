@@ -1,7 +1,8 @@
 // Yaku detection and per-row evaluation.
 // Rules (see CLAUDE.md §4): closed rows are treated as riichi + menzen tsumo, so any complete
 // closed row has a yaku. Rows with open melds (chains) need a real open-legal yaku. Win is tsumo.
-// A row only wins when its tiles are in a valid left-to-right order (evaluateOrdered).
+// By default a row only wins when its tiles are in a valid left-to-right order (evaluateOrdered);
+// with the rule option { requireOrder: false } any arrangement of a winning set of tiles counts.
 
 import { counts34, toIndex34, normalize, sortTiles, isRed, TILE_NAMES } from './tiles.js';
 import { decompose, isChiitoi, isKokushi, shanten } from './hand.js';
@@ -269,14 +270,48 @@ export function findWaitGroups(cells, winTile) {
   return groups.sort((x, y) => x.col - y.col || x.len - y.len);
 }
 
+/**
+ * Unsorted rule: every way to split the loose tiles + winning tile `w` into sets and a pair (or seven
+ * pairs), once for each group the winning tile could have completed (that decides the wait, and so fu).
+ * Same group format as parseRuns, without column positions.
+ */
+function unorderedParses(counts, w, setsNeeded) {
+  const out = [];
+  const withEachWait = (groups) => {
+    const seen = new Set();
+    groups.forEach((g, i) => {
+      if (!groupTiles(g).includes(w)) return;
+      const key = `${g.type}${g.start}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      let wait;
+      if (g.type === 'pair') wait = 'tanki';
+      else if (g.type === 'pon') wait = 'shanpon';
+      else {
+        const pos = w - g.start; // where the winning tile sits in the sequence
+        if (pos === 1) wait = 'kanchan';
+        else if (pos === 0) wait = g.start % 9 === 6 ? 'penchan' : 'ryanmen'; // 89 waiting on 7
+        else wait = g.start % 9 === 0 ? 'penchan' : 'ryanmen';               // 12 waiting on 3
+      }
+      out.push(groups.map((x, j) => (j === i ? { ...x, wait } : x)));
+    });
+  };
+  for (const d of decompose(counts, setsNeeded)) withEachWait([{ type: 'pair', start: d.pair }, ...d.sets]);
+  if (setsNeeded === 4 && isChiitoi(counts)) {
+    withEachWait(counts.flatMap((n, i) => (n === 2 ? [{ type: 'pair', start: i }] : [])));
+  }
+  return out;
+}
+
 const NO_WIN = { complete: false, hasYaku: false, yaku: [], yakuHan: [], han: 0, fu: 0, points: 0, limit: '', groups: [] };
 
 /**
- * Ordered win check for one row: the playfield `cells`, read left to right (chains split runs),
- * must form ordered groups with exactly one wait, which the fixed `winTile` completes.
+ * Win check for one row. With requireOrder (default) the playfield `cells`, read left to right (chains
+ * split runs), must form ordered groups with exactly one wait, which the fixed `winTile` completes.
+ * Without it, any arrangement of a winning set of tiles counts.
  * Returns the best-scoring win: { complete, hasYaku, yaku, yakuHan, han, fu, points, limit, groups }.
  */
-export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '1z' } = {}) {
+export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '1z', requireOrder = true } = {}) {
   const meldTiles = new Map();
   for (const cell of cells) {
     if (!cell.chain) continue;
@@ -297,7 +332,11 @@ export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '
 
   // Each candidate: { names, groups, fu }
   const candidates = [];
-  for (const groups of parseRuns(looseRuns(cells), toIndex34(winTile))) {
+  const w = toIndex34(winTile);
+  const parses = requireOrder
+    ? parseRuns(looseRuns(cells), w)
+    : unorderedParses(counts34([...cells.filter((x) => !x.chain).map((x) => x.tile), winTile]), w, 4 - melds.length);
+  for (const groups of parses) {
     const pairs = groups.filter((g) => g.type === 'pair');
     if (pairs.length === 1 && groups.length - 1 + melds.length === 4) {
       const all = [...groups.map((g) => ({ ...g, open: false })), ...openGroups];
@@ -358,8 +397,8 @@ export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '
  * groups: valid tile groups to box ({ type, col, len, wait? }). For a won row these are the
  *         winning groups; otherwise the best contiguous sets/pairs found.
  */
-export function evaluateRow(board, r) {
-  const ctx = { seatWind: board.seatWinds[r], roundWind: board.roundWind };
+export function evaluateRow(board, r, { requireOrder = true } = {}) {
+  const ctx = { seatWind: board.seatWinds[r], roundWind: board.roundWind, requireOrder };
   const { closed, melds } = rowHand(board, r);
   const loose = evaluateHand({ closed, melds, ...ctx });
   const ordered = evaluateOrdered(board.cells[r], board.winTiles[r], ctx);
@@ -380,14 +419,16 @@ export function evaluateRow(board, r) {
     fu: solved ? ordered.fu : 0,
     points: solved ? ordered.points : 0,
     limit: solved ? ordered.limit : '',
-    groups: ordered.complete ? ordered.groups : findGroups(board.cells[r]),
+    // Box positions come from the winning parse only when it is positional (ordered rule).
+    groups: requireOrder && ordered.complete ? ordered.groups : findGroups(board.cells[r]),
     // Boxes around tiles the winning tile would complete: just the wait group once the row wins.
-    waits: ordered.complete
+    waits: requireOrder && ordered.complete
       ? ordered.groups.filter((g) => g.wait).map(({ col, len }) => ({ col, len }))
       : findWaitGroups(board.cells[r], board.winTiles[r]),
   };
 }
 
-export const evaluateBoard = (board) => board.cells.map((_, r) => evaluateRow(board, r));
+/** rules: { requireOrder = true } */
+export const evaluateBoard = (board, rules) => board.cells.map((_, r) => evaluateRow(board, r, rules));
 
-export const isBoardSolved = (board) => evaluateBoard(board).every((e) => e.solved);
+export const isBoardSolved = (board, rules) => evaluateBoard(board, rules).every((e) => e.solved);

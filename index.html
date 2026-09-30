@@ -81,6 +81,13 @@
       </div>
       <p class="field-note" id="control-note"></p>
       <div class="field">
+        <span class="field-label">Tile order</span>
+        <div class="segmented" id="order" role="radiogroup" aria-label="Tile order">
+          <label><input type="radio" name="order" value="sorted"><span>Sorted<small>groups in order</small></span></label>
+          <label><input type="radio" name="order" value="any"><span>Any order<small>just the right tiles</small></span></label>
+        </div>
+      </div>
+      <div class="field">
         <span class="field-label">Hints</span>
         <label class="check"><input type="checkbox" id="hints"><span>Show group boxes, shanten and win glow</span></label>
       </div>
@@ -127,6 +134,8 @@
           <div class="segmented" id="vs-time" role="radiogroup" aria-label="Time per round"></div></div>
         <div class="field"><span class="field-label">Controls</span>
           <div class="segmented" id="vs-controls" role="radiogroup" aria-label="Controls"></div></div>
+        <div class="field"><span class="field-label">Tile order</span>
+          <div class="segmented" id="vs-order" role="radiogroup" aria-label="Tile order"></div></div>
         <div class="field"><span class="field-label">Hints</span>
           <label class="check"><input type="checkbox" id="vs-hints"><span>Group boxes, shanten and win glow</span></label></div>
         <div class="field"><label for="vs-seed">Seed</label>
@@ -163,7 +172,8 @@
     <h2>How to play</h2>
     <ul class="help-list">
       <li>Make <strong>every row</strong> a winning riichi hand, read left to right: sequences ascending
-        (4-5-6), triplets in any order, pairs side by side.</li>
+        (4-5-6), triplets in any order, pairs side by side. With the <strong>Any order</strong> tile-order
+        setting, a row wins as soon as it holds the right tiles, in any arrangement.</li>
       <li>The red-outlined tile in the <strong>Win</strong> column is each row's winning tile. It never moves.
         It completes the one unfinished group in its row, wherever that group is (e.g. 5-6 &hellip; &rarr; 4).
         That group's own tiles still have to be in order.</li>

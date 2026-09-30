@@ -14,7 +14,7 @@ This file is the design spec and the build plan. Keep it up to date when decisio
 | Topic | Decision |
 |---|---|
 | Columns | **13-column playfield + 1 fixed winning tile per row** (red outline, its own "Win" column). The winning tile never moves: row and column shifts only touch the playfield. It completes the row's one incomplete group, wherever that group is (§4.4). |
-| Hand validity | Winning shape **in a valid left-to-right order** (§4.4) **and at least 1 yaku**. |
+| Hand validity | Winning shape **in a valid left-to-right order** (§4.4) **and at least 1 yaku**. A **Tile order** setting (solo setup, 1v1 host) can switch to **Any order**: then the right tiles in any arrangement win (§4.5). |
 | Yaku context | Fully closed rows count as **riichi** (so they always have a yaku). Rows with an open set need a real yaku. Each row has its own **seat wind**; the **round wind** is shared by the puzzle. The win is always treated as **tsumo**. |
 | Open sets | **Pon + chii only** (3-tile chains, no kans). Chains can never be split. Drawn "locked": greyer and smaller, with one random tile turned sideways (clockwise) (`cell.sideways`, chosen by the seeded generator). |
 | Row wrap | A chain wraps **as one unit** (see §3.2). |
@@ -175,6 +175,18 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
 - `groups` (for the colored boxes): the winning parse for a complete row (the wait group is marked
   `wait`, drawn dashed), otherwise the best non-overlapping contiguous sets/pairs per run (`findGroups`).
 
+### 4.5 "Any order" rule (`rules = { requireOrder: false }`)
+- `evaluateRow(board, r, rules)` / `evaluateBoard(board, rules)` / `generatePuzzle(seed, difficulty, rules)`;
+  default `{ requireOrder: true }`. Settings: `UI.requireOrderDefault`, `MULTIPLAYER.requireOrder`; solo remembers
+  it (localStorage `jong-jumble.order`), share links carry `&order=any`, 1v1 sends it in `roundStart`.
+- A row wins when its loose tiles + winning tile form 4 sets + pair (or seven pairs / kokushi) in any
+  arrangement, with a yaku. Open sets still count as open melds and must stay whole.
+- Scoring is identical: `unorderedParses` tries every group the winning tile could have completed and derives
+  the wait (tanki / shanpon / ryanmen / penchan / kanchan) for fu and pinfu; the best-scoring reading wins.
+- Group boxes and red wait boxes still show the positional `findGroups` / `findWaitGroups` hints; `reorder`
+  status can't happen.
+- The generator passes the rule to the scramble, so a puzzle never starts with a row already solved under it.
+
 ---
 
 ## 5. Puzzle generation (`js/core/generator.js`, `js/core/rng.js`)
@@ -274,7 +286,7 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 - **Protocol:** `js/net/protocol.js` documents every message and holds `sanitizeSettings` / `sanitizeName`,
   shared by client and server.
 - **Room flow:** host `create`s → 5-char code (no 0/O/1/I) → guest `join`s (case-insensitive) → host
-  `configure`s (difficulty, rounds 1/3/5/7/9, time per round 1-10 min, controls, hints, seed; any change
+  `configure`s (difficulty, rounds 1/3/5/7/9, time per round 1-10 min, controls, tile order, hints, seed; any change
   un-readies both) → both `ready` → match.
 - **Rounds:** round seed = `deriveSeed(matchSeed, r)`; matchSeed = host's seed or random. Server sends
   `roundStart` with `startAt` + `serverNow` (clients convert to their own clock), a 3 s countdown
@@ -332,7 +344,7 @@ package.json                 # "ws" dependency, scripts: start, test
 ## 9. Build phases
 
 1. ✅ **Core logic + tests:** tiles, rng, board moves, hand decomposition, shanten, yaku, generator,
-   scoring, config, hand points, wait boxes, drag & drop moves. 32 tests, including the reference-image hands, the ordering rules, hand
+   scoring, config, hand points, wait boxes, drag & drop moves, any-order rule. 41 tests, including the reference-image hands, the ordering rules, hand
    values, and a 2000-move inverse random walk.
 2. ✅ **Rendering + controls:** `js/ui/render.js` (DOM tiles with absolute positions, FLIP slide animation,
    wrapped tiles slide in from the edge, hover highlights, blocked arrows).

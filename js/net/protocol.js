@@ -13,7 +13,7 @@
 // Server → client
 //   joined     { code, you }                 you = your player index (0 = host)
 //   room       { code, phase, settings, players: [{ name, ready }], you }
-//   roundStart { round, rounds, seed, difficulty, startAt, serverNow, timeLimitSec, hints, controlMode }
+//   roundStart { round, rounds, seed, difficulty, startAt, serverNow, timeLimitSec, hints, controlMode, requireOrder }
 //   progress   { player, moves, solved }     either player's progress (no scores)
 //   sync       { board, moves }              your board as the server has it (after a rejected move)
 //   roundEnd   { round }
@@ -40,6 +40,7 @@ export function defaultSettings() {
     timeLimitSec: MULTIPLAYER.roundTimeLimitSec,
     hints: MULTIPLAYER.hints,
     controlMode: MULTIPLAYER.controlMode,
+    requireOrder: MULTIPLAYER.requireOrder,
   };
 }
 
@@ -52,5 +53,6 @@ export function sanitizeSettings(input = {}, current = defaultSettings()) {
   if (MULTIPLAYER.timeLimitOptions.includes(Number(input.timeLimitSec))) s.timeLimitSec = Number(input.timeLimitSec);
   if (typeof input.hints === 'boolean') s.hints = input.hints;
   if (input.controlMode === 'shift' || input.controlMode === 'drop') s.controlMode = input.controlMode;
+  if (typeof input.requireOrder === 'boolean') s.requireOrder = input.requireOrder;
   return s;
 }

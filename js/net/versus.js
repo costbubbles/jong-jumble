@@ -1,7 +1,7 @@
 // 1v1 client: WebSocket connection, lobby dialog, round flow, results.
 // Talks to server/rooms.js (protocol in js/net/protocol.js) and drives the board through `game`:
 //
-//   game.startRound({ seed, difficulty, hints, controlMode, startsInMs, timeLimitSec, round, rounds })
+//   game.startRound({ seed, difficulty, hints, controlMode, requireOrder, startsInMs, timeLimitSec, round, rounds })
 //   game.syncBoard(board, moves)   game.lockBoard()   game.endVersus()   game.showTitle()
 //   game.setOverlay(text | null)   game.setOpponent({ name, text } | null)
 
@@ -182,6 +182,7 @@ export function createVersus(game) {
   segmented('vs-rounds', 'vs-rounds', MULTIPLAYER.roundOptions.map((n) => [n, String(n)]));
   segmented('vs-time', 'vs-time', MULTIPLAYER.timeLimitOptions.map((s) => [s, formatLimit(s)]));
   segmented('vs-controls', 'vs-controls', [['shift', 'Shift'], ['drop', 'Drag & drop']]);
+  segmented('vs-order', 'vs-order', [['sorted', 'Sorted', 'groups in order'], ['any', 'Any order', 'just the right tiles']]);
   $('vs-hints').addEventListener('change', configure);
   $('vs-seed').addEventListener('change', configure);
 
@@ -199,6 +200,7 @@ export function createVersus(game) {
         rounds: Number(radio('vs-rounds')),
         timeLimitSec: Number(radio('vs-time')),
         controlMode: radio('vs-controls'),
+        requireOrder: radio('vs-order') !== 'any',
         hints: $('vs-hints').checked,
         seed: $('vs-seed').value,
       },
@@ -219,6 +221,7 @@ export function createVersus(game) {
     setRadio('vs-rounds', s.rounds);
     setRadio('vs-time', s.timeLimitSec);
     setRadio('vs-controls', s.controlMode);
+    setRadio('vs-order', s.requireOrder ? 'sorted' : 'any');
     $('vs-hints').checked = s.hints;
     if (document.activeElement !== $('vs-seed')) $('vs-seed').value = s.seed;
 
