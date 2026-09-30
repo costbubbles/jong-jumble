@@ -341,12 +341,42 @@ function showHome() {
   home.show();
 }
 
+// ---------------------------------------------------------------------------
+// Mobile: landscape only. Fullscreen + orientation lock need a user gesture and only work on some
+// browsers (Android Chrome); everywhere else the CSS rotate overlay covers portrait.
+
+const isTouch = window.matchMedia('(pointer: coarse)').matches;
+
+async function enterLandscape() {
+  if (!isTouch) return;
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    }
+    await screen.orientation?.lock?.('landscape');
+  } catch { /* not supported: the rotate overlay handles portrait */ }
+}
+
+// Pause the solo clock while the phone is held upright (the rotate overlay hides the board).
+let pausedByRotate = false;
+window.matchMedia('(orientation: portrait) and (pointer: coarse)').addEventListener('change', (e) => {
+  if (e.matches && !state.versus && state.pausedAt === null && state.startedAt !== null) {
+    pauseTimer();
+    pausedByRotate = true;
+  } else if (!e.matches && pausedByRotate) {
+    pausedByRotate = false;
+    resumeTimer();
+  }
+});
+
 const home = createHome(document.getElementById('home'), {
   onSolo: () => {
+    enterLandscape();
     showGame();
     openMenu();
   },
   onVersus: () => {
+    enterLandscape();
     showGame();
     versus.open();
   },

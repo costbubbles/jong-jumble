@@ -269,6 +269,16 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 
 ---
 
+## 6.1b Mobile (landscape only)
+- Touch devices in portrait get a full-screen "Turn your device sideways" overlay (CSS
+  `@media (orientation: portrait) and (pointer: coarse)`); the solo clock pauses meanwhile.
+- Tapping Solo / 1v1 on a touch device requests fullscreen + `screen.orientation.lock('landscape')`
+  (works on Android Chrome; iOS falls back to the overlay). `manifest.webmanifest` (display fullscreen,
+  orientation landscape, icons in `assets/icons/`) makes "Add to Home Screen" launch sideways.
+- Short / narrow windows (`max-height: 560px` or `max-width: 900px`) use a compact top bar and dialogs, and
+  the board switches to compact metrics (`LAYOUT.compact` in render.js: smaller arrows, info column, row gap,
+  rim `--board-rim`). A 4-row board fits a 740×360 phone at ~34 px tiles. Safe-area insets pad notched phones.
+
 ## 6.2 Home screen (`js/ui/home.js`, `assets/home/`)
 - Matches the user's 1920×1080 mockup: authored on a 1920×1080 `.home-stage` that JS scales to fit the window
   (anchored left, centered vertically; the wall bleeds right/up/down for other aspect ratios).
@@ -373,6 +383,5 @@ package.json                 # "ws" dependency, scripts: start, test
 - See README.md for details.
 
 ## 12. Open questions / tuning
-- Phone width: the board is ~15 × 24 px wide at minimum and scrolls horizontally. It needs a mobile layout (phase 7).
 - Scrambled starts currently sit at roughly 0–2 shanten per row. Tune `scrambleMoves` and `openSetWeights` in
   playtesting. The defaults in `js/config.js` are: 3 rounds, 180 s round limit, tiebreak = fewer total seconds.

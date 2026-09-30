@@ -11,7 +11,7 @@ import { createRoomManager } from './rooms.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PORT = Number(process.env.PORT) || MULTIPLAYER.port;
-const PUBLIC = ['index.html', 'css', 'js', 'sprites', 'assets']; // only these are served
+const PUBLIC = ['index.html', 'manifest.webmanifest', 'css', 'js', 'sprites', 'assets']; // only these are served
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -20,6 +20,8 @@ const TYPES = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2',
 };
 
 async function serveStatic(req, res) {

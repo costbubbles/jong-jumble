@@ -32,6 +32,7 @@
   --box-pon: #4f9d45;
   --box-chi: #3a6fd8;
   --locked-scale: 0.9;
+  --board-rim: 4px;        /* gold rim around the board; arrows are offset by it */
 
   /* Board metrics. js/ui/render.js overwrites these to fit the screen. */
   --tile: 64px;
@@ -126,7 +127,7 @@ main { flex: 1; display: flex; align-items: center; justify-content: center; pad
   position: relative;
   overflow: hidden;
   background: var(--panel);
-  border: 4px solid var(--gold);
+  border: var(--board-rim) solid var(--gold);
   box-shadow: inset 0 0 0 3px var(--rim);
   box-sizing: content-box;
 }
@@ -242,8 +243,8 @@ main { flex: 1; display: flex; align-items: center; justify-content: center; pad
 
 /* arrows (offset by the 4px board rim so they line up with the tiles) */
 .arrows { display: flex; }
-.arrows-top, .arrows-bottom { flex-direction: row; padding-left: 4px; }
-.arrows-left, .arrows-right { flex-direction: column; padding-top: 4px; }
+.arrows-top, .arrows-bottom { flex-direction: row; padding-left: var(--board-rim); }
+.arrows-left, .arrows-right { flex-direction: column; padding-top: var(--board-rim); }
 .arrows-top .arrow, .arrows-bottom .arrow { width: var(--step-x); height: var(--arrow-size); }
 .arrows-left .arrow, .arrows-right .arrow { height: var(--step-y); width: var(--arrow-size); }
 
@@ -273,7 +274,7 @@ main { flex: 1; display: flex; align-items: center; justify-content: center; pad
 .dir-right svg { transform: rotate(90deg); }
 
 /* row info */
-.row-info { display: flex; flex-direction: column; padding-top: 4px; }
+.row-info { display: flex; flex-direction: column; padding-top: var(--board-rim); }
 .row-status {
   height: var(--step-y);
   display: flex;
@@ -449,6 +450,83 @@ main { position: relative; }
 .match-table td.unsolved { color: var(--muted); }
 .match-table tr.total td { font-family: var(--pixel); font-weight: 700; border-bottom: none; border-top: 3px solid var(--gold); }
 .match-table td.winner { color: var(--green); }
+
+/* ------------------------------------------------------------------ mobile / landscape */
+
+body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#game { min-height: 100dvh; }
+.topbar {
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+main {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+}
+.tile-dialog { max-height: calc(100dvh - 16px); overflow-y: auto; }
+
+/* Portrait on a touch device: cover everything with a "rotate" prompt. */
+.rotate-overlay { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    background: #fff;
+    text-align: center;
+  }
+  .rotate-overlay p { margin: 0; font-family: var(--pixel); font-size: 1.3rem; color: var(--red); }
+  .rotate-overlay small { font-family: var(--pixel); font-size: 0.8rem; color: var(--muted); }
+  .rotate-phone {
+    width: 70px;
+    height: 110px;
+    display: grid;
+    place-items: center;
+    border: 5px solid var(--gold);
+    box-shadow: inset 0 0 0 4px var(--rim);
+    animation: rotate-hint 2.2s ease-in-out infinite;
+  }
+  .rotate-phone img { width: 48px; image-rendering: pixelated; }
+}
+@keyframes rotate-hint {
+  0%, 25% { transform: rotate(0deg); }
+  55%, 85% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* Short screens (phones in landscape, small laptops): compact top bar, dialogs and board chrome. */
+@media (max-height: 560px), (max-width: 900px) {
+  .topbar { gap: 6px 12px; padding-top: 6px; padding-bottom: 6px; border-bottom-width: 2px; box-shadow: 0 2px 0 var(--rim); }
+  .logo img { height: 40px; }
+  .tile-btn { font-size: 0.72rem; padding: 7px 9px; border-width: 2px; }
+  .topbar-menu, .actions { gap: 6px; }
+  .stats { gap: 4px 12px; }
+  .stat .label { font-size: 0.56rem; }
+  .stat span:last-child { font-size: 0.85rem; }
+  main { padding-top: 4px; padding-bottom: 4px; }
+
+  .tile-dialog { padding: 16px 18px; }
+  .tile-dialog h2 { font-size: 1.25rem; margin-bottom: 10px; }
+  .field { margin-bottom: 10px; gap: 4px; }
+  .segmented span { padding: 6px 4px; font-size: 0.74rem; }
+  .segmented small { font-size: 0.58rem; }
+  .dialog-buttons { margin-top: 12px; }
+  .help-list li { margin: 4px 0; font-size: 0.85rem; }
+  .board-overlay span { padding: 10px 18px; }
+}
+
+.board.compact .row-status { font-size: 0.58rem; gap: 2px; }
+.board.compact .row-status .seat img { width: 18px; height: 18px; }
+.board.compact .win-head { font-size: 0.6rem; }
+.board.compact .arrow svg { width: min(22px, 80%); height: min(22px, 80%); }
+.board.compact { --board-rim: 3px; }
+.board.compact .tiles, .board.compact .win-col { box-shadow: inset 0 0 0 2px var(--rim); }
 
 /* ------------------------------------------------------------------ home screen
    Authored on a 1920×1080 stage that matches the design mockup; js/ui/home.js scales it to fit. */

@@ -21,10 +21,14 @@ import { applyMove, columnMoveSet, expandSelection } from '../core/board.js';
 import { UI } from '../config.js';
 
 const ARROW_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 L21 11.5 H16 V21.5 H8 V11.5 H3 Z"/></svg>';
-const ARROW_SIZE = 40;
-const INFO_WIDTH = 150;
+// Layout sizes: normal, and compact for phones / short windows (see computeMetrics).
+const LAYOUT = {
+  normal: { arrow: 40, info: 150, rowGap: 10, slackW: 90, slackH: 48 },
+  compact: { arrow: 30, info: 96, rowGap: 6, slackW: 60, slackH: 16 },
+};
+const isCompact = () => window.innerHeight < 560 || window.innerWidth < 900;
 const GAP = 0;       // space between tiles
-const ROW_GAP = 10;  // extra vertical space between rows (rows are separate hands)
+
 
 function el(tag, className, parent) {
   const e = document.createElement(tag);
@@ -185,7 +189,7 @@ export function createBoardView(host, { onMove }) {
     dropEl.classList.toggle('invalid', !drag.move);
     Object.assign(dropEl.style, {
       left: `${col * metrics.stepX}px`,
-      top: `${target.row * metrics.stepY + ROW_GAP / 2}px`,
+      top: `${target.row * metrics.stepY + metrics.rowGap / 2}px`,
       width: `${len * metrics.stepX}px`,
       height: `${metrics.stepX}px`,
     });
@@ -252,7 +256,7 @@ export function createBoardView(host, { onMove }) {
     if (hoverEl.hidden) return;
     if (!hoverEl.parentNode) tiles.appendChild(hoverEl);
     hoverEl.style.left = `${hoverCell.col * metrics.stepX}px`;
-    hoverEl.style.top = `${hoverCell.row * metrics.stepY + ROW_GAP / 2}px`;
+    hoverEl.style.top = `${hoverCell.row * metrics.stepY + metrics.rowGap / 2}px`;
   }
 
   // ------------------------------------------------------------------ layout
@@ -261,15 +265,16 @@ export function createBoardView(host, { onMove }) {
   function computeMetrics() {
     const maxTile = 32 * UI.tileScale;
     // 90 = grid gaps + board/win-column rims + the win column's margin
-    const availW = Math.max(320, host.clientWidth || window.innerWidth) - 2 * ARROW_SIZE - INFO_WIDTH - 90;
+    const L = isCompact() ? LAYOUT.compact : LAYOUT.normal;
+    const availW = Math.max(300, host.clientWidth || window.innerWidth) - 2 * L.arrow - L.info - L.slackW;
     // Measure from the top of <main> (the board is centered inside it, so its own top moves).
     const top = (host.closest('main') ?? host).getBoundingClientRect().top;
-    const availH = window.innerHeight - top - 2 * ARROW_SIZE - 48;
+    const availH = window.innerHeight - top - 2 * L.arrow - L.slackH;
     const byWidth = Math.floor(availW / (board.cols + 1)) - GAP;
-    const byHeight = Math.floor(availH / board.cells.length) - ROW_GAP - GAP;
-    const tile = Math.max(24, Math.min(maxTile, byWidth, byHeight));
+    const byHeight = Math.floor(availH / board.cells.length) - L.rowGap - GAP;
+    const tile = Math.max(18, Math.min(maxTile, byWidth, byHeight));
     const stepX = tile + GAP;
-    return { tile, stepX, stepY: stepX + ROW_GAP };
+    return { tile, stepX, stepY: stepX + L.rowGap, rowGap: L.rowGap, arrow: L.arrow, info: L.info };
   }
 
   function applyMetrics() {
@@ -278,8 +283,9 @@ export function createBoardView(host, { onMove }) {
     s.setProperty('--tile', `${metrics.tile}px`);
     s.setProperty('--step-x', `${metrics.stepX}px`);
     s.setProperty('--step-y', `${metrics.stepY}px`);
-    s.setProperty('--arrow-size', `${ARROW_SIZE}px`);
-    s.setProperty('--info-width', `${INFO_WIDTH}px`);
+    s.setProperty('--arrow-size', `${metrics.arrow}px`);
+    s.setProperty('--info-width', `${metrics.info}px`);
+    root.classList.toggle('compact', isCompact());
     tiles.style.width = `${board.cols * metrics.stepX}px`;
     tiles.style.height = winCol.style.height = `${board.cells.length * metrics.stepY}px`;
     winCol.style.width = `${metrics.stepX}px`;
@@ -343,7 +349,7 @@ export function createBoardView(host, { onMove }) {
       if (!t) { t = createTileEl(cell); tileEls.set(cell, t); }
       live.add(cell);
       t.style.left = `${c * metrics.stepX}px`;
-      t.style.top = `${r * metrics.stepY + ROW_GAP / 2}px`;
+      t.style.top = `${r * metrics.stepY + metrics.rowGap / 2}px`;
       t.classList.toggle('locked', !!cell.chain);
       t.classList.toggle('sideways', !!cell.sideways);
       // Position inside the open set (0, 1, 2) so the set shrinks as one group and stays touching.
@@ -373,7 +379,7 @@ export function createBoardView(host, { onMove }) {
     }
     [...winCol.children].forEach((t, r) => {
       t.style.left = '0px';
-      t.style.top = `${r * metrics.stepY + ROW_GAP / 2}px`;
+      t.style.top = `${r * metrics.stepY + metrics.rowGap / 2}px`;
     });
   }
 
@@ -472,7 +478,7 @@ export function createBoardView(host, { onMove }) {
       const b = el('div', 'box box-win', tiles);
       Object.assign(b.style, {
         left: `${g.col * metrics.stepX + 4}px`,
-        top: `${r * metrics.stepY + ROW_GAP / 2 + 4}px`,
+        top: `${r * metrics.stepY + metrics.rowGap / 2 + 4}px`,
         width: `${g.len * metrics.stepX - 8}px`,
         height: `${metrics.stepX - 8}px`,
         animationDelay: `${UI.animationMs}ms`,
@@ -483,7 +489,7 @@ export function createBoardView(host, { onMove }) {
       const b = el('div', `box box-${g.type}${g.wait ? ' box-wait' : ''}`, tiles);
       Object.assign(b.style, {
         left: `${g.col * metrics.stepX}px`,
-        top: `${r * metrics.stepY + ROW_GAP / 2}px`,
+        top: `${r * metrics.stepY + metrics.rowGap / 2}px`,
         width: `${g.len * metrics.stepX}px`,
         height: `${metrics.stepX}px`,
         animationDelay: `${UI.animationMs}ms`,

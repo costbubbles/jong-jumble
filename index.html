@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Jong Jumble">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
   <title>Jong Jumble</title>
   <link rel="icon" href="sprites/Red.png">
   <link rel="preload" href="assets/fonts/silkscreen-400.woff2" as="font" type="font/woff2" crossorigin>
@@ -10,6 +16,12 @@
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
+  <!-- Touch devices held in portrait: ask to rotate (the game is landscape-only). -->
+  <div id="rotate-overlay" class="rotate-overlay" role="alert">
+    <div class="rotate-phone" aria-hidden="true"><img src="sprites/Red.png" alt=""></div>
+    <p>Turn your device sideways</p>
+    <small>Jong Jumble plays in landscape</small>
+  </div>
   <section id="home" class="home" hidden>
     <div class="home-stage">
       <div class="home-wall" aria-hidden="true"></div>
