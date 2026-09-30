@@ -24,7 +24,7 @@ This file is the design spec and the build plan. Keep it up to date when decisio
 | Modes | **Seed input** (empty = random) + difficulty **Easy / Medium / Hard = 2 / 3 / 4 rows**, and **live head-to-head multiplayer**. |
 | QoL | Move counter, timer, undo, per-row validity glow, **per-row shanten counter** (+ "no yaku" flag), **Restart** and **New/Reset** buttons, colored group boxes, hover + WASD/arrow-key controls (§6). |
 | Config | **Every tunable default lives in `js/config.js`**: the scoring formula, difficulty presets, generation weights, UI, and multiplayer defaults. Don't hard-code tunables elsewhere. |
-| Scoring | One formula for SP and MP, defined in `js/config.js` → `SCORING` (§6.1). |
+| Scoring | Puzzle difficulty (start shanten × rule/controls/hints multipliers), halving every 60 s. One formula for SP and MP in `js/config.js` → `SCORING` (§6.1). |
 | Multiplayer match | **Best of N rounds.** All N rounds are always played; scores stay hidden until the end. Each round has a host-set time limit; an unsolved round scores 0. The host toggles hints and picks the control mode (shift or drag & drop) for both players. |
 | Art | User-supplied **32×32 pixel-art PNGs** in `sprites/` (§2). There is **no tile back**. |
 | Stack | **Vanilla JS, ES modules, no build step.** DOM/CSS rendering. Pure logic modules are shared with the server. |
@@ -255,16 +255,21 @@ straight to the board. Last difficulty, controls and hints are remembered (local
 - Moves are animated with FLIP slides; wrapped tiles slide in from the edge.
 
 ### 6.1 Scoring (edit in `js/config.js` → `SCORING`; `js/core/scoring.js` only wraps it)
+Score = **how hard the puzzle was**, halving every minute:
 ```
-score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
+pot   = 1000 × Σ over rows of (startShanten + 1) × orderMult × controlMult × hintsMult
+score = pot × 0.5 ^ (seconds / 60)
+orderMult   strict 1.5 · reverse 1.25 · any 1.0
+controlMult shift 1.0 · drag & drop 0.6
+hintsMult   hints off 1.25 · on 1.0
 ```
-- `handPoints` = each solved row's tsumo value in points (§4.2b). Solving within 30 s (`graceSeconds`) keeps
-  the full hand total; after that it is divided by the extra seconds.
-- `formula()` also receives `moves` and `shantenSum` (Σ over rows of start shanten + 1) so they can be
-  added back later; they are currently unused. Undo still counts as a move.
-- An unsolved round (MP time-out) scores **0**. The display rounds to an integer (`SCORING.round`).
-- `computeScore({ startShanten[], handPoints[], moves, seconds, solved })` in `js/core/scoring.js` is the only
-  caller. SP, MP clients, and the server all use it.
+- `startShanten` = each row's shanten on the scrambled start board (a more scrambled board is worth more).
+- Solo uses the **easiest settings used during the puzzle**: hints on at any point → hints multiplier "on";
+  any drag & drop move → drop multiplier. The win dialog shows the breakdown line.
+- 1v1: the server scores with the host's settings; seconds count from the end of the countdown.
+- `formula()` also receives `moves` and `handPoints` (unused now). An unsolved round scores **0**.
+- `computeScore({ startShanten[], handPoints[], moves, seconds, solved, order, controlMode, hints })` is the only
+  caller of the formula; SP and the server both use it.
 - The URL carries `?seed=…&d=easy|medium|hard`.
 
 ---

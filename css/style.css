@@ -366,6 +366,7 @@ kbd {
 /* win */
 .score { font-family: var(--pixel); font-size: 2.6rem; font-weight: 700; margin: 0 0 14px; font-variant-numeric: tabular-nums; }
 .score small { font-size: 0.9rem; font-weight: 400; color: var(--muted); margin-left: 10px; }
+.score-breakdown { margin: -8px 0 14px; font-family: var(--pixel); font-size: 0.66rem; color: var(--muted); line-height: 1.6; }
 .win-stats { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0 0 12px; }
 .win-stats dt { font-family: var(--pixel); font-size: 0.8rem; color: var(--muted); align-self: center; }
 .win-stats dd { margin: 0; font-family: var(--pixel); }

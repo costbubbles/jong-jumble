@@ -138,8 +138,9 @@ export function createHud(handlers) {
       $('undo').disabled = !canUndo || solved;
     },
     /** rows: evaluateRow results for the solved board. */
-    showWin({ score, moves, seconds, seed, link, rows }) {
+    showWin({ score, breakdown, moves, seconds, seed, link, rows }) {
       $('win-score').textContent = score.toLocaleString();
+      $('win-breakdown').textContent = breakdown ?? '';
       $('win-moves').textContent = moves;
       $('win-time').textContent = formatTime(seconds);
       $('win-seed').textContent = seed;

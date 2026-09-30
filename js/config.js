@@ -5,19 +5,31 @@
 // ---------------------------------------------------------------------------
 // Scoring (single player and multiplayer both use this)
 // ---------------------------------------------------------------------------
-// score = Σ handPoints / max(1, seconds − graceSeconds)
+// Puzzle difficulty, decaying with time:
+//   pot   = perShanten × shantenSum × orderMult × controlMult × hintsMult
+//   score = pot × 0.5 ^ (seconds / halfLifeSec)
 //
 // Variables available to formula() (use any of them if you change it):
-//   handPoints : each solved row's riichi tsumo value in points (e.g. [2000, 3900, 8000])
-//   seconds    : time from first move to solve
-//   moves      : moves made, undo included
-//   shantenSum : sum over rows of (row shanten on the scrambled start board + 1)
+//   shantenSum  : sum over rows of (row shanten on the scrambled start board + 1): how scrambled it was
+//   seconds     : time from first move to solve (1v1: from the end of the countdown)
+//   order       : ordering rule 'strict' | 'reverse' | 'any'
+//   controlMode : 'shift', or 'drop' if any drag & drop move was used
+//   hints       : true if hints were on at any point during the puzzle
+//   moves       : moves made, undo included
+//   handPoints  : each solved row's riichi tsumo value in points (e.g. [2000, 3900, 8000])
 // An unsolved round always scores 0 (handled in js/core/scoring.js).
 export const SCORING = {
-  graceSeconds: 30,   // solving within this many seconds gets the full hand total
-  formula({ handPoints, seconds }) {
-    const handSum = handPoints.reduce((sum, p) => sum + p, 0);
-    return handSum / Math.max(1, seconds - this.graceSeconds);
+  perShanten: 1000,
+  halfLifeSec: 60,                                  // the score halves every minute
+  orderMult: { strict: 1.5, reverse: 1.25, any: 1 },
+  controlMult: { shift: 1, drop: 0.6 },
+  hintsMult: { on: 1, off: 1.25 },
+  formula({ shantenSum, seconds, order, controlMode, hints }) {
+    const pot = this.perShanten * shantenSum
+      * (this.orderMult[order] ?? 1)
+      * (this.controlMult[controlMode] ?? 1)
+      * (hints ? this.hintsMult.on : this.hintsMult.off);
+    return pot * 0.5 ** (seconds / this.halfLifeSec);
   },
   // How the raw formula value is turned into the displayed integer.
   round: Math.round,

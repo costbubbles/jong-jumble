@@ -9,9 +9,15 @@ import { SCORING } from '../config.js';
  * @param {number} p.moves           moves made (undo included)
  * @param {number} p.seconds         seconds from first move to solve
  * @param {boolean} p.solved         unsolved rounds score 0
+ * @param {string} p.order           ordering rule: 'strict' | 'reverse' | 'any'
+ * @param {string} p.controlMode     'shift', or 'drop' if any drag & drop move was used
+ * @param {boolean} p.hints          hints were on at any point
  */
-export function computeScore({ startShanten, handPoints, moves, seconds, solved }) {
+export function computeScore({
+  startShanten, handPoints = [], moves, seconds, solved,
+  order = 'strict', controlMode = 'shift', hints = true,
+}) {
   if (!solved || moves <= 0) return 0;
   const shantenSum = startShanten.reduce((sum, s) => sum + s + 1, 0);
-  return SCORING.round(SCORING.formula({ shantenSum, moves, seconds, handPoints }));
+  return SCORING.round(SCORING.formula({ shantenSum, handPoints, moves, seconds, order, controlMode, hints }));
 }

@@ -102,7 +102,10 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
       moves: g.moves,
       seconds: Math.round(seconds * 10) / 10,
       points: handPoints.reduce((a, b) => a + b, 0),
-      score: computeScore({ startShanten: room.puzzle.startShanten, handPoints, moves: g.moves, seconds, solved }),
+      score: computeScore({
+        startShanten: room.puzzle.startShanten, handPoints, moves: g.moves, seconds, solved,
+        order: room.settings.order, controlMode: room.settings.controlMode, hints: room.settings.hints,
+      }),
     };
   }
 

@@ -5,7 +5,7 @@
 // Shared links (?seed=…&d=…) skip straight to the board.
 // 1v1 (js/net/versus.js) reuses this board: rounds come from the server, moves are mirrored to it.
 
-import { DIFFICULTIES, DEFAULT_DIFFICULTY, GENERATION, UI, ORDER_RULES } from './config.js';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY, GENERATION, UI, ORDER_RULES, SCORING } from './config.js';
 import { generatePuzzle } from './core/generator.js';
 import { applyMove, inverseMove } from './core/board.js';
 import { evaluateBoard } from './core/yaku.js';
@@ -54,6 +54,9 @@ const state = {
   controlMode: loadSetting(KEYS.controls, UI.controlModeDefault),
   order: normalizeOrder(loadSetting(KEYS.order, UI.orderDefault)),
   dropSwap: loadSetting(KEYS.dropSwap, UI.dropSwapDefault ? '1' : '0') === '1',
+  // Easiest settings used during the current puzzle (score multipliers can't be gamed mid-puzzle)
+  hintsUsed: false,
+  dropUsed: false,
   // 1v1 round in progress: { timeLimitSec, startPerf, locked } (null in solo)
   versus: null,
 };
@@ -118,6 +121,8 @@ function restart() {
   state.startedAt = null;
   state.pausedAt = null;
   state.solvedSeconds = null;
+  state.hintsUsed = state.hints;
+  state.dropUsed = false;
   hud.hideWin();
   update({ animate: false });
 }
@@ -133,6 +138,7 @@ function doMove(move) {
   if (!next) return false;
   state.history.push({ board: state.board, move });
   state.board = next;
+  if (move.type === 'drop') state.dropUsed = true;
   countMove();
   if (state.versus) versus.sendMove(move);
   update({ move, animate: true });
@@ -178,9 +184,22 @@ function update({ move = null, animate }) {
       moves: state.moves,
       seconds: state.solvedSeconds,
       solved: true,
+      order: state.order,
+      controlMode: state.dropUsed ? 'drop' : 'shift',
+      hints: state.hintsUsed,
     });
+    const shantenSum = state.puzzle.startShanten.reduce((sum, s) => sum + s + 1, 0);
+    const control = state.dropUsed ? 'drop' : 'shift';
+    const breakdown = [
+      `Difficulty ${shantenSum} × ${SCORING.perShanten}`,
+      `${ORDER_RULES[state.order].label} ×${SCORING.orderMult[state.order]}`,
+      `${control === 'drop' ? 'Drag & drop' : 'Shift'} ×${SCORING.controlMult[control]}`,
+      `Hints ${state.hintsUsed ? 'on' : 'off'} ×${state.hintsUsed ? SCORING.hintsMult.on : SCORING.hintsMult.off}`,
+      `halves every ${SCORING.halfLifeSec}s`,
+    ].join('  ·  ');
     setTimeout(() => hud.showWin({
       score,
+      breakdown,
       moves: state.moves,
       seconds: state.solvedSeconds,
       seed: state.seed,
@@ -234,6 +253,7 @@ const hud = createHud({
   },
   onHints: (on) => {
     state.hints = on;
+    if (on && state.puzzle) state.hintsUsed = true;
     saveSetting(KEYS.hints, on ? '1' : '0');
     if (state.puzzle) view.setRowStatus(state.evals, { hints: on });
   },

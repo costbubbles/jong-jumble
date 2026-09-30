@@ -43,11 +43,15 @@ for (const difficulty of Object.keys(DIFFICULTIES)) {
 }
 
 test('scoring formula', () => {
+  // shantenSum = (2+1) + (1+1) = 5 -> pot 5000 before multipliers
   const base = { startShanten: [2, 1], handPoints: [2000, 1000], moves: 10, solved: true };
-  // (2000 + 1000) / max(1, seconds − 30)
-  assert.equal(computeScore({ ...base, seconds: 20 }), 3000);
-  assert.equal(computeScore({ ...base, seconds: 30.5 }), 3000);
-  assert.equal(computeScore({ ...base, seconds: 130 }), 30);
+  assert.equal(computeScore({ ...base, seconds: 0 }), 7500);                      // strict ×1.5
+  assert.equal(computeScore({ ...base, seconds: 60 }), 3750);                     // halves each minute
+  assert.equal(computeScore({ ...base, seconds: 120 }), 1875);
+  assert.equal(computeScore({ ...base, seconds: 0, order: 'any' }), 5000);
+  assert.equal(computeScore({ ...base, seconds: 0, order: 'reverse' }), 6250);
+  assert.equal(computeScore({ ...base, seconds: 0, controlMode: 'drop' }), 4500);
+  assert.equal(computeScore({ ...base, seconds: 0, hints: false }), 9375);
   assert.equal(computeScore({ ...base, seconds: 5, solved: false }), 0);
 });
 
