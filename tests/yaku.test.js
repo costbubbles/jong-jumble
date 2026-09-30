@@ -16,20 +16,18 @@ const hand = (closed, melds = [], seatWind = '1z', roundWind = '1z') => evaluate
 const row = (notation, seatWind = '1z', roundWind = '1z') =>
   evaluateRow(createBoard({ rows: [notation], roundWind, seatWinds: [seatWind] }), 0);
 
-test('reference image row 1: drawn 4m completes 56m; open South pon needs a South wind', () => {
-  const east = row('406s 345p 99p 56m 4m [222z]', '1z');
+test('reference image row 1: winning 4m completes 56m; open South pon needs a South wind', () => {
+  const east = row('406s 345p 99p 56m [222z] 4m', '1z');
   assert.equal(east.status, 'noyaku');
-  assert.equal(east.drawnCol, 10);
 
-  const south = row('406s 345p 99p 56m 4m [222z]', '2z');
+  const south = row('406s 345p 99p 56m [222z] 4m', '2z');
   assert.equal(south.status, 'solved');
   assert.ok(south.yaku.includes('Yakuhai: Seat Wind (South)'));
 });
 
-test('reference image row 2: drawn 9p completes 78p in the middle of the row', () => {
+test('reference image row 2: winning 9p completes 78p in the middle of the row', () => {
   const e = row('123s 05s 78p 123m 444m 9p');
   assert.equal(e.status, 'solved');
-  assert.equal(e.drawnCol, 13);
   assert.deepEqual(e.yaku.slice(0, 2), ['Riichi', 'Menzen Tsumo']);
 });
 
@@ -46,10 +44,45 @@ test('ordering rules', () => {
   assert.equal(row('123s 55p 12p 123m 444m 3p').status, 'solved');
   assert.equal(row('123s 55p 789p 123m 44m 4m').status, 'solved');
   assert.equal(row('123s 5p 789p 123m 444m 5p').status, 'solved');
-  // Only the last loose tile is the drawn tile; a stray 9p elsewhere doesn't complete 78p.
+  // A stray 9p in the playfield doesn't complete 78p; only the winning tile does.
   assert.equal(row('123s 05s 9p 78p 123m 444m').status, 'reorder');
   // Chains split runs: a sequence can't span across a chain.
   assert.equal(row('12s [222z] 3s 55p 123m 44m 4m', '2z').status, 'reorder');
+});
+
+test('hand points (tsumo)', () => {
+  // Reference row 2 as dealer: riichi, tsumo, aka dora = 3 han 30 fu -> 2000 all = 6000
+  const r2 = row('123s 05s 78p 123m 444m 9p', '1z');
+  assert.deepEqual([r2.han, r2.fu, r2.points], [3, 30, 6000]);
+  // Reference row 1, South seat: yakuhai + aka = 2 han 30 fu -> 500/1000 = 2000
+  const r1 = row('406s 345p 99p 56m [222z] 4m', '2z');
+  assert.deepEqual([r1.han, r1.fu, r1.points], [2, 30, 2000]);
+  // Pinfu tsumo: riichi, tsumo, pinfu = 3 han 20 fu -> 700/1300 = 2700
+  const pinfu = row('123m 456p 789s 55m 23s 4s', '2z');
+  assert.ok(pinfu.yaku.includes('Pinfu'));
+  assert.deepEqual([pinfu.han, pinfu.fu, pinfu.points], [3, 20, 2700]);
+  // Kanchan wait breaks pinfu
+  assert.ok(!row('123m 456p 789s 55m 24s 3s', '2z').yaku.includes('Pinfu'));
+  // Open chinitsu + ittsu = 6 han haneman -> 3000/6000 = 12000
+  const hane = row('123m 789m 99m 11m [456m] 1m', '2z');
+  assert.deepEqual([hane.han, hane.points, hane.limit], [6, 12000, 'Haneman']);
+});
+
+test('valid groups are reported for boxes', () => {
+  const e = row('123s 55p 87p 123m 444m 9p');
+  assert.equal(e.status, 'reorder');
+  assert.deepEqual(e.groups.map((g) => `${g.type}@${g.col}`), ['chi@0', 'pair@3', 'chi@7', 'pon@10']);
+  const won = row('123s 05s 78p 123m 444m 9p');
+  assert.ok(won.groups.some((g) => g.wait === 'ryanmen' && g.col === 5 && g.len === 2));
+  assert.deepEqual(won.waitCols, [5, 6]);
+});
+
+test('tiles the winning tile would complete are found', () => {
+  // win 4m: 56m (cols 0-1) ryanmen, 35m (cols 3-4) kanchan, lone 4m (col 6); 9p 1s unrelated
+  const e = row('56m 9p 35m 1s 4m 123456z 4m');
+  assert.deepEqual(e.waitCols, [0, 1, 3, 4, 6]);
+  // not across a chain, and not descending
+  assert.deepEqual(row('5m [111z] 6m 65m 9999p 11s 4m').waitCols, []);
 });
 
 test('chiitoitsu needs adjacent pairs; kokushi any order', () => {

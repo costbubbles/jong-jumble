@@ -64,16 +64,20 @@ export function createHud(handlers) {
       $('undo').disabled = !canUndo || solved;
     },
     setHints(on) { $('hints').checked = on; },
-    showWin({ score, moves, seconds, seed, link, yakuByRow }) {
+    /** rows: evaluateRow results for the solved board. */
+    showWin({ score, moves, seconds, seed, link, rows }) {
       $('win-score').textContent = score.toLocaleString();
       $('win-moves').textContent = moves;
       $('win-time').textContent = formatTime(seconds);
       $('win-seed').textContent = seed;
       $('share-link').value = link;
       const list = $('win-yaku');
-      list.replaceChildren(...yakuByRow.map((yaku) => {
+      list.replaceChildren(...rows.map((r) => {
         const li = document.createElement('li');
-        li.textContent = yaku.join(', ');
+        const head = document.createElement('strong');
+        head.textContent = `${r.points.toLocaleString()} pts`;
+        const detail = ` (${r.han} han ${r.fu} fu${r.limit ? `, ${r.limit}` : ''}): `;
+        li.append(head, detail + r.yakuHan.map((y) => `${y.name} ${y.han}`).join(', '));
         return li;
       }));
       dialog.showModal();

@@ -6,17 +6,22 @@
 // Scoring (single player and multiplayer both use this)
 // ---------------------------------------------------------------------------
 // score = ((Σ(startShanten + 1) / moves) × (base + max(0, floor(timeCap − seconds)))) × multiplier
+//         × (Π handPoints / max(1, ceil(seconds − handTimeOffset)))
 //   shantenSum : sum over rows of (row shanten on the scrambled start board + 1)
 //   moves      : moves made, undo included
 //   seconds    : time from first move to solve
+//   handPoints : each solved row's riichi tsumo value in points (e.g. [2000, 3900, 8000])
 // An unsolved round always scores 0 (handled in js/core/scoring.js).
 export const SCORING = {
   base: 10,
   timeCap: 100,
   multiplier: 1000,
-  formula({ shantenSum, moves, seconds }) {
+  handTimeOffset: 30,
+  formula({ shantenSum, moves, seconds, handPoints }) {
     const timeTerm = this.base + Math.max(0, Math.floor(this.timeCap - seconds));
-    return (shantenSum / moves) * timeTerm * this.multiplier;
+    const handProduct = handPoints.reduce((product, p) => product * p, 1);
+    const handTerm = handProduct / Math.max(1, Math.ceil(seconds - this.handTimeOffset));
+    return (shantenSum / moves) * timeTerm * this.multiplier * handTerm;
   },
   // How the raw formula value is turned into the displayed integer.
   round: Math.round,
@@ -37,7 +42,7 @@ export const DEFAULT_DIFFICULTY = 'easy';
 // Puzzle generation
 // ---------------------------------------------------------------------------
 export const GENERATION = {
-  cols: 14,
+  cols: 13,                               // playfield width (+1 fixed winning-tile column)
   roundWinds: ['1z', '2z'],               // East / South round, picked per puzzle
   seatWinds: ['1z', '2z', '3z', '4z'],    // row i gets seatWinds[i % 4]
   chiitoiChance: 0.06,                    // closed rows only

@@ -2,11 +2,11 @@
 // Rules (see CLAUDE.md §4): closed rows are treated as riichi + menzen tsumo, so any complete
 // closed row has a yaku. Rows with open melds (chains) need a real open-legal yaku. Win is tsumo.
 // A row only wins when its tiles are in a valid left-to-right order (evaluateOrdered).
-// Pinfu is not detected.
 
-import { counts34, toIndex34, normalize, sortTiles, TILE_NAMES } from './tiles.js';
+import { counts34, toIndex34, normalize, sortTiles, isRed, TILE_NAMES } from './tiles.js';
 import { decompose, isChiitoi, isKokushi, shanten } from './hand.js';
 import { rowHand, meldType } from './board.js';
+import { hanOf, fuOf, tsumoPoints, YAKUMAN } from './points.js';
 
 const HAKU = 31, HATSU = 32, CHUN = 33;
 const GREEN = new Set([19, 20, 21, 23, 25, HATSU]); // 2s 3s 4s 6s 8s hatsu
@@ -111,18 +111,13 @@ const openGroupsOf = (melds) => melds.map((m) => ({
   open: true,
 }));
 
-/** Best yaku list among the candidate decompositions (closed hands get riichi + tsumo). */
-function summarize(candidates, isClosed) {
-  const complete = candidates.length > 0;
-  let yaku = candidates.reduce((best, y) => (y.length > best.length ? y : best), []);
-  if (complete && isClosed) yaku = ['Riichi', 'Menzen Tsumo', ...yaku];
-  return { complete, hasYaku: yaku.length > 0, yaku };
-}
+// ---------------------------------------------------------------------------
+// Multiset evaluation (tile order ignored), used for hints
+// ---------------------------------------------------------------------------
 
 /**
- * Evaluate a hand as a multiset (tile order ignored):
- * { closed: TileId[], melds: [{ tiles, type }], seatWind, roundWind }.
- * Returns { shanten, complete, hasYaku, yaku }.
+ * { closed: TileId[], melds: [{ tiles, type }], seatWind, roundWind }
+ * -> { shanten, complete, hasYaku, yaku }
  */
 export function evaluateHand({ closed, melds = [], seatWind = '1z', roundWind = '1z' }) {
   if (melds.some((m) => m.type !== 'pon' && m.type !== 'chi')) {
@@ -144,17 +139,35 @@ export function evaluateHand({ closed, melds = [], seatWind = '1z', roundWind = 
   if (isClosed && isChiitoi(counts)) candidates.push(chiitoiYaku(counts));
   if (isClosed && isKokushi(counts)) candidates.push(['Kokushi Musou']);
 
-  const result = summarize(candidates, isClosed);
-  return { shanten: result.complete ? -1 : shanten(counts, melds.length), ...result };
+  const complete = candidates.length > 0;
+  let yaku = candidates.reduce((best, y) => (y.length > best.length ? y : best), []);
+  if (complete && isClosed) yaku = ['Riichi', 'Menzen Tsumo', ...yaku];
+  return { shanten: complete ? -1 : shanten(counts, melds.length), complete, hasYaku: yaku.length > 0, yaku };
 }
 
 // ---------------------------------------------------------------------------
 // Ordered evaluation (the actual win condition, CLAUDE.md §4.4)
 // ---------------------------------------------------------------------------
 
+/** Loose tiles split into runs by chains: [[{ idx, col }]]. */
+function looseRuns(cells) {
+  const runs = [];
+  let run = [];
+  cells.forEach((cell, col) => {
+    if (cell.chain) {
+      if (run.length) runs.push(run);
+      run = [];
+    } else {
+      run.push({ idx: toIndex34(cell.tile), col });
+    }
+  });
+  if (run.length) runs.push(run);
+  return runs;
+}
+
 /**
- * All left-to-right parses of the loose runs into groups, with exactly one incomplete group
- * (the wait) completed by the drawn tile `w`. Returns arrays of { type, start }.
+ * All left-to-right parses of the runs into groups with exactly one incomplete group (the wait)
+ * completed by the drawn tile `w`. Groups: { type, start, col, len, wait? }.
  */
 function parseRuns(runs, w) {
   const out = [];
@@ -168,24 +181,24 @@ function parseRuns(runs, w) {
     }
     const run = runs[ri];
     if (pos === run.length) return step(ri + 1, 0, waitUsed);
-    const [a, b, c] = [run[pos], run[pos + 1], run[pos + 2]];
-    const take = (group, len, usesWait) => {
-      acc.push(group);
-      step(ri, pos + len, waitUsed || usesWait);
+    const [a, b, c] = [run[pos]?.idx, run[pos + 1]?.idx, run[pos + 2]?.idx];
+    const col = run[pos].col;
+    const take = (type, start, len, wait) => {
+      acc.push(wait ? { type, start, col, len, wait } : { type, start, col, len });
+      step(ri, pos + len, waitUsed || !!wait);
       acc.pop();
     };
 
-    if (c !== undefined && a === b && b === c) take({ type: 'pon', start: a }, 3, false);
-    if (c !== undefined && sameSuit(a, b, c) && b === a + 1 && c === a + 2) take({ type: 'chi', start: a }, 3, false);
-    if (b !== undefined && a === b) take({ type: 'pair', start: a }, 2, false);
+    if (c !== undefined && a === b && b === c) take('pon', a, 3);
+    if (c !== undefined && sameSuit(a, b, c) && b === a + 1 && c === a + 2) take('chi', a, 3);
+    if (b !== undefined && a === b) take('pair', a, 2);
     if (waitUsed) return;
-    // Wait groups, completed by the drawn tile w.
-    if (a === w) take({ type: 'pair', start: a }, 1, true);                       // tanki
-    if (b !== undefined && a === b && a === w) take({ type: 'pon', start: a }, 2, true); // shanpon
+    if (a === w) take('pair', a, 1, 'tanki');
+    if (b !== undefined && a === b && a === w) take('pon', a, 2, 'shanpon');
     if (b !== undefined && sameSuit(a, b, w)) {
-      if (b === a + 1 && w === a - 1) take({ type: 'chi', start: w }, 2, true);   // ryanmen/penchan, low side
-      if (b === a + 1 && w === b + 1) take({ type: 'chi', start: a }, 2, true);   // ryanmen/penchan, high side
-      if (b === a + 2 && w === a + 1) take({ type: 'chi', start: a }, 2, true);   // kanchan
+      if (b === a + 1 && w === a - 1) take('chi', w, 2, a % 9 === 7 ? 'penchan' : 'ryanmen');
+      if (b === a + 1 && w === b + 1) take('chi', a, 2, a % 9 === 0 ? 'penchan' : 'ryanmen');
+      if (b === a + 2 && w === a + 1) take('chi', a, 2, 'kanchan');
     }
   };
   step(0, 0, false);
@@ -193,49 +206,139 @@ function parseRuns(runs, w) {
 }
 
 /**
- * Ordered win check for one row. The last loose tile is the drawn tile; the rest of the loose
- * tiles, read left to right (chains split runs), must form ordered groups with one wait.
- * Returns { complete, hasYaku, yaku, drawnCol }.
+ * Best-scoring valid groups in a row that isn't won yet (for the colored boxes): per run, the
+ * non-overlapping contiguous sets/pairs covering the most tiles (sets preferred on ties).
  */
-export function evaluateOrdered(cells, { seatWind = '1z', roundWind = '1z' } = {}) {
-  let drawnCol = -1;
-  cells.forEach((cell, c) => { if (!cell.chain) drawnCol = c; });
-  const none = { complete: false, hasYaku: false, yaku: [], drawnCol };
-  if (drawnCol < 0) return none;
-
-  const runs = [];
-  let run = [];
-  const meldTiles = new Map();
-  cells.forEach((cell, c) => {
-    if (cell.chain) {
-      if (run.length) runs.push(run);
-      run = [];
-      if (!meldTiles.has(cell.chain)) meldTiles.set(cell.chain, []);
-      meldTiles.get(cell.chain).push(cell.tile);
-    } else if (c !== drawnCol) {
-      run.push(toIndex34(cell.tile));
+export function findGroups(cells) {
+  const groups = [];
+  for (const run of looseRuns(cells)) {
+    const n = run.length;
+    const best = new Array(n + 1).fill(0);
+    const choice = new Array(n + 1).fill(null);
+    for (let i = n - 1; i >= 0; i--) {
+      const [a, b, c] = [run[i]?.idx, run[i + 1]?.idx, run[i + 2]?.idx];
+      best[i] = best[i + 1];
+      const consider = (type, len, weight) => {
+        if (weight + best[i + len] > best[i]) { best[i] = weight + best[i + len]; choice[i] = { type, len }; }
+      };
+      if (b !== undefined && a === b) consider('pair', 2, 2);
+      if (c !== undefined && a === b && b === c) consider('pon', 3, 3.01);
+      if (c !== undefined && a < 27 && Math.floor(a / 9) === Math.floor(c / 9) && b === a + 1 && c === a + 2) {
+        consider('chi', 3, 3.01);
+      }
     }
-  });
-  if (run.length) runs.push(run);
-
-  const melds = [...meldTiles.values()].map((tiles) => ({ tiles, type: meldType(tiles) }));
-  if (melds.some((m) => m.type === 'invalid')) return none;
-  const isClosed = melds.length === 0;
-  const openGroups = openGroupsOf(melds);
-  const ctx = { closed: isClosed, seatWind, roundWind };
-
-  const candidates = [];
-  for (const groups of parseRuns(runs, toIndex34(cells[drawnCol].tile))) {
-    const pairs = groups.filter((g) => g.type === 'pair');
-    if (pairs.length === 1 && groups.length - 1 + melds.length === 4) {
-      candidates.push(standardYaku([...groups.map((g) => ({ ...g, open: false })), ...openGroups], ctx));
-    } else if (isClosed && pairs.length === 7 && new Set(pairs.map((g) => g.start)).size === 7) {
-      candidates.push(chiitoiYaku(counts34(cells.map((x) => x.tile))));
+    for (let i = 0; i < n;) {
+      if (choice[i]) {
+        groups.push({ type: choice[i].type, col: run[i].col, len: choice[i].len });
+        i += choice[i].len;
+      } else i++;
     }
   }
-  if (isClosed && isKokushi(counts34(cells.map((x) => x.tile)))) candidates.push(['Kokushi Musou']);
+  return groups;
+}
 
-  return { ...summarize(candidates, isClosed), drawnCol };
+/**
+ * Playfield columns holding tiles that the winning tile `w` would complete into a group:
+ * a single copy of w (→ pair), an adjacent pair of w (→ triplet), or two adjacent ascending tiles
+ * that w turns into a sequence (ryanmen / penchan / kanchan).
+ */
+export function findWaitCols(cells, winTile) {
+  const w = toIndex34(winTile);
+  const cols = new Set();
+  for (const run of looseRuns(cells)) {
+    run.forEach(({ idx, col }, i) => {
+      if (idx === w) cols.add(col);
+      const next = run[i + 1];
+      if (!next || w >= 27 || idx >= 27) return;
+      const [a, b] = [idx, next.idx];
+      const sameSuit = Math.floor(a / 9) === Math.floor(b / 9) && Math.floor(a / 9) === Math.floor(w / 9);
+      if (sameSuit && ((b === a + 1 && (w === a - 1 || w === b + 1)) || (b === a + 2 && w === a + 1))) {
+        cols.add(col);
+        cols.add(next.col);
+      }
+    });
+  }
+  return [...cols].sort((x, y) => x - y);
+}
+
+const NO_WIN = { complete: false, hasYaku: false, yaku: [], yakuHan: [], han: 0, fu: 0, points: 0, limit: '', groups: [] };
+
+/**
+ * Ordered win check for one row: the playfield `cells`, read left to right (chains split runs),
+ * must form ordered groups with exactly one wait, which the fixed `winTile` completes.
+ * Returns the best-scoring win: { complete, hasYaku, yaku, yakuHan, han, fu, points, limit, groups }.
+ */
+export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '1z' } = {}) {
+  const meldTiles = new Map();
+  for (const cell of cells) {
+    if (!cell.chain) continue;
+    if (!meldTiles.has(cell.chain)) meldTiles.set(cell.chain, []);
+    meldTiles.get(cell.chain).push(cell.tile);
+  }
+  const melds = [...meldTiles.values()].map((tiles) => ({ tiles, type: meldType(tiles) }));
+  if (melds.some((m) => m.type === 'invalid')) return NO_WIN;
+
+  const isClosed = melds.length === 0;
+  const openGroups = openGroupsOf(melds);
+  const seat = toIndex34(seatWind);
+  const round = toIndex34(roundWind);
+  const allTiles = [...cells.map((x) => x.tile), winTile];
+  const allCounts = counts34(allTiles);
+  const akaDora = allTiles.filter(isRed).length;
+  const dealer = seatWind === '1z';
+
+  // Each candidate: { names, groups, fu }
+  const candidates = [];
+  for (const groups of parseRuns(looseRuns(cells), toIndex34(winTile))) {
+    const pairs = groups.filter((g) => g.type === 'pair');
+    if (pairs.length === 1 && groups.length - 1 + melds.length === 4) {
+      const all = [...groups.map((g) => ({ ...g, open: false })), ...openGroups];
+      const names = standardYaku(all, { closed: isClosed, seatWind, roundWind });
+      const pair = pairs[0].start;
+      const pinfu = isClosed && all.every((g) => g.type !== 'pon')
+        && pair < 31 && pair !== seat && pair !== round
+        && groups.some((g) => g.wait === 'ryanmen');
+      if (pinfu && !names.some((n) => YAKUMAN.has(n))) names.unshift('Pinfu');
+      candidates.push({ names, groups, fu: fuOf(all, { seat, round, pinfu }) });
+    } else if (isClosed && pairs.length === 7 && new Set(pairs.map((g) => g.start)).size === 7) {
+      candidates.push({ names: chiitoiYaku(allCounts), groups, fu: 25 });
+    }
+  }
+  if (isClosed && isKokushi(allCounts)) candidates.push({ names: ['Kokushi Musou'], groups: [], fu: 0 });
+  if (!candidates.length) return NO_WIN;
+
+  let best = null;
+  for (const cand of candidates) {
+    const yakumanNames = cand.names.filter((n) => YAKUMAN.has(n));
+    let yakuHan;
+    if (yakumanNames.length) {
+      yakuHan = yakumanNames.map((name) => ({ name, han: 13 }));
+    } else {
+      const names = isClosed ? ['Riichi', 'Menzen Tsumo', ...cand.names] : cand.names;
+      yakuHan = names.map((name) => ({ name, han: hanOf(name, !isClosed) }));
+    }
+    const hasYaku = yakuHan.length > 0;
+    if (hasYaku && akaDora && !yakumanNames.length) yakuHan.push({ name: 'Aka Dora', han: akaDora });
+    const han = yakuHan.reduce((s, y) => s + y.han, 0);
+    const { points, limit } = hasYaku
+      ? tsumoPoints({ han, fu: cand.fu, yakumanCount: yakumanNames.length, dealer })
+      : { points: 0, limit: '' };
+    const result = {
+      complete: true,
+      hasYaku,
+      yaku: yakuHan.filter((y) => y.name !== 'Aka Dora').map((y) => y.name),
+      yakuHan,
+      han,
+      fu: cand.fu,
+      points,
+      limit,
+      groups: cand.groups,
+    };
+    if (!best || result.points > best.points || (result.points === best.points && result.han > best.han)) {
+      best = result;
+    }
+  }
+  return best;
 }
 
 /**
@@ -244,24 +347,36 @@ export function evaluateOrdered(cells, { seatWind = '1z', roundWind = '1z' } = {
  *         'noyaku'  the tiles form a winning shape but no yaku is possible
  *         'reorder' the tiles could win with a yaku, but are not in a valid order
  *         'shanten' not a winning set of tiles yet (see `shanten`)
+ * groups: valid tile groups to box ({ type, col, len, wait? }). For a won row these are the
+ *         winning groups; otherwise the best contiguous sets/pairs found.
  */
 export function evaluateRow(board, r) {
   const ctx = { seatWind: board.seatWinds[r], roundWind: board.roundWind };
   const { closed, melds } = rowHand(board, r);
   const loose = evaluateHand({ closed, melds, ...ctx });
-  const ordered = evaluateOrdered(board.cells[r], ctx);
+  const ordered = evaluateOrdered(board.cells[r], board.winTiles[r], ctx);
 
   let status = 'shanten';
   if (ordered.complete && ordered.hasYaku) status = 'solved';
   else if (ordered.complete || (loose.complete && !loose.hasYaku)) status = 'noyaku';
   else if (loose.complete) status = 'reorder';
+  const solved = status === 'solved';
 
   return {
     status,
-    solved: status === 'solved',
+    solved,
     shanten: loose.shanten,
-    yaku: status === 'solved' ? ordered.yaku : [],
-    drawnCol: ordered.drawnCol,
+    yaku: solved ? ordered.yaku : [],
+    yakuHan: solved ? ordered.yakuHan : [],
+    han: solved ? ordered.han : 0,
+    fu: solved ? ordered.fu : 0,
+    points: solved ? ordered.points : 0,
+    limit: solved ? ordered.limit : '',
+    groups: ordered.complete ? ordered.groups : findGroups(board.cells[r]),
+    // Tiles the winning tile would complete: just the wait group once the row wins.
+    waitCols: ordered.complete
+      ? ordered.groups.filter((g) => g.wait).flatMap((g) => Array.from({ length: g.len }, (_, i) => g.col + i))
+      : findWaitCols(board.cells[r], board.winTiles[r]),
   };
 }
 

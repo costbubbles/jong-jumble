@@ -2,8 +2,9 @@
 // applyMove returns a new board (or null when the move is illegal).
 //
 // Board {
-//   cols: 14,
-//   cells: Cell[rows][cols],   // Cell = { tile: TileId, chain: string|null }
+//   cols: 13,                  // the playfield; moves only ever touch these cells
+//   cells: Cell[rows][cols],   // Cell = { tile: TileId, chain: string|null, sideways?: true }
+//   winTiles: TileId[rows],    // each row's winning tile, fixed to the right of the playfield
 //   roundWind: TileId,
 //   seatWinds: TileId[rows],   // seat wind belongs to the row position, not to the tiles
 // }
@@ -11,7 +12,7 @@
 
 import { parseTiles, normalize, sortTiles, suit, num, isHonor } from './tiles.js';
 
-export const COLS = 14;
+export const COLS = 13;
 export const CHAIN_LEN = 3;
 
 // ---------------------------------------------------------------------------
@@ -19,8 +20,8 @@ export const CHAIN_LEN = 3;
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a row like "456s 345p 99p 564m [222z]". Bracketed groups become chains.
- * Chain ids are `${idPrefix}${n}`.
+ * Parse a row like "406s 345p 99p 56m [222z] 4m". Bracketed groups become chains.
+ * Chain ids are `${idPrefix}${n}`. Returns all 14 cells (the last one is the winning tile).
  */
 export function rowFromNotation(str, idPrefix = 'c') {
   const cells = [];
@@ -38,16 +39,19 @@ export function rowFromNotation(str, idPrefix = 'c') {
   return cells;
 }
 
+/** Rows are 14-tile notation strings; the last tile of each is that row's fixed winning tile. */
 export function createBoard({ rows, roundWind = '1z', seatWinds }) {
-  const cells = rows.map((row, r) => (typeof row === 'string' ? rowFromNotation(row, `r${r}c`) : row));
-  for (const row of cells) {
-    if (row.length !== COLS) throw new Error(`Row must have ${COLS} tiles, got ${row.length}`);
+  const full = rows.map((row, r) => rowFromNotation(row, `r${r}c`));
+  for (const row of full) {
+    if (row.length !== COLS + 1) throw new Error(`Row must have ${COLS + 1} tiles, got ${row.length}`);
+    if (row[COLS].chain) throw new Error('The winning tile (last) cannot be part of a chain');
   }
   return {
     cols: COLS,
-    cells,
+    cells: full.map((row) => row.slice(0, COLS)),
+    winTiles: full.map((row) => row[COLS].tile),
     roundWind,
-    seatWinds: seatWinds ?? cells.map((_, r) => ['1z', '2z', '3z', '4z'][r % 4]),
+    seatWinds: seatWinds ?? full.map((_, r) => ['1z', '2z', '3z', '4z'][r % 4]),
   };
 }
 
@@ -55,7 +59,7 @@ export const rowCount = (board) => board.cells.length;
 
 export function boardsEqual(a, b) {
   if (a.cells.length !== b.cells.length) return false;
-  return a.cells.every((row, r) =>
+  return a.winTiles.every((t, r) => t === b.winTiles[r]) && a.cells.every((row, r) =>
     row.every((cell, c) => cell.tile === b.cells[r][c].tile && cell.chain === b.cells[r][c].chain));
 }
 
@@ -82,9 +86,9 @@ export function meldType(tiles) {
   return 'invalid';
 }
 
-/** Split a row into closed tiles and open melds (chains). */
+/** Split a row into closed tiles (winning tile included) and open melds (chains). */
 export function rowHand(board, r) {
-  const closed = [];
+  const closed = [board.winTiles[r]];
   const byChain = new Map();
   for (const { tile, chain } of board.cells[r]) {
     if (!chain) closed.push(tile);

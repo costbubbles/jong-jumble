@@ -4,6 +4,7 @@
 //   view.setBoard(board, { move, animate });   // move = the move just applied (for wrap animation)
 //   view.setRowStatus(evals, { hints });
 //   view.setLocked(true|false);
+//   view.getHover();                            // { row, col } under the mouse, or null
 
 import { TILE_IMAGES, TILE_NAMES } from '../core/tiles.js';
 import { columnMoveSet } from '../core/board.js';
@@ -12,8 +13,8 @@ import { UI } from '../config.js';
 const ARROW_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 L21 11.5 H16 V21.5 H8 V11.5 H3 Z"/></svg>';
 const ARROW_SIZE = 40;
 const INFO_WIDTH = 118;
-const GAP = 8;       // space between tiles (also the width of the open-set frame)
-const ROW_GAP = 12;  // extra vertical space between rows
+const GAP = 0;       // space between tiles
+const ROW_GAP = 10;  // extra vertical space between rows (rows are separate hands)
 
 function el(tag, className, parent) {
   const e = document.createElement(tag);
@@ -26,10 +27,13 @@ export function createBoardView(host, { onMove }) {
   const root = el('div', 'board', host);
   el('div', 'corner', root);
   const top = el('div', 'arrows arrows-top', root);
+  const winHead = el('div', 'win-head', root);
+  winHead.textContent = 'Win';
   el('div', 'corner', root);
   el('div', 'corner', root);
   const left = el('div', 'arrows arrows-left', root);
   const tiles = el('div', 'tiles', root);
+  const winCol = el('div', 'win-col', root);   // fixed winning tiles, outside the playfield
   const right = el('div', 'arrows arrows-right', root);
   const info = el('div', 'row-info', root);
   el('div', 'corner', root);
@@ -43,14 +47,38 @@ export function createBoardView(host, { onMove }) {
   let colArrows = [];
   let metrics = null;
   let hoverMove = null;
+  let hoverCell = null;
   const highlights = [];
+  let boxes = [];
+  let lastStatus = null;   // [evals, opts] from the last setRowStatus, redrawn on resize
+  const hoverEl = el('div', 'hover-cell');
+  hoverEl.hidden = true;
+
+  tiles.addEventListener('mousemove', (e) => {
+    if (!board) return;
+    const rect = tiles.getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / metrics.stepX);
+    const row = Math.floor((e.clientY - rect.top) / metrics.stepY);
+    const inside = row >= 0 && row < board.cells.length && col >= 0 && col < board.cols;
+    hoverCell = inside ? { row, col } : null;
+    drawHoverCell();
+  });
+  tiles.addEventListener('mouseleave', () => { hoverCell = null; drawHoverCell(); });
+
+  function drawHoverCell() {
+    hoverEl.hidden = !hoverCell || root.classList.contains('locked');
+    if (hoverEl.hidden) return;
+    if (!hoverEl.parentNode) tiles.appendChild(hoverEl);
+    hoverEl.style.left = `${hoverCell.col * metrics.stepX}px`;
+    hoverEl.style.top = `${hoverCell.row * metrics.stepY + ROW_GAP / 2}px`;
+  }
 
   // ------------------------------------------------------------------ layout
 
   function computeMetrics() {
     const maxTile = 32 * UI.tileScale;
-    const avail = Math.max(320, host.clientWidth || window.innerWidth) - 2 * ARROW_SIZE - INFO_WIDTH - 24;
-    const tile = Math.max(24, Math.min(maxTile, Math.floor(avail / board.cols) - GAP));
+    const avail = Math.max(320, host.clientWidth || window.innerWidth) - 2 * ARROW_SIZE - INFO_WIDTH - 48;
+    const tile = Math.max(24, Math.min(maxTile, Math.floor(avail / (board.cols + 1)) - GAP));
     const stepX = tile + GAP;
     return { tile, stepX, stepY: stepX + ROW_GAP };
   }
@@ -64,7 +92,8 @@ export function createBoardView(host, { onMove }) {
     s.setProperty('--arrow-size', `${ARROW_SIZE}px`);
     s.setProperty('--info-width', `${INFO_WIDTH}px`);
     tiles.style.width = `${board.cols * metrics.stepX}px`;
-    tiles.style.height = `${board.cells.length * metrics.stepY}px`;
+    tiles.style.height = winCol.style.height = `${board.cells.length * metrics.stepY}px`;
+    winCol.style.width = `${metrics.stepX}px`;
     stripes.forEach((st, r) => { st.style.top = `${r * metrics.stepY}px`; });
   }
 
@@ -104,8 +133,8 @@ export function createBoardView(host, { onMove }) {
 
   // ------------------------------------------------------------------ tiles
 
-  function createTileEl(cell) {
-    const t = el('div', 'tile', tiles);
+  function createTileEl(cell, parent = tiles) {
+    const t = el('div', 'tile', parent);
     const img = el('img', '', t);
     img.src = TILE_IMAGES[cell.tile];
     img.alt = cell.tile;
@@ -126,14 +155,32 @@ export function createBoardView(host, { onMove }) {
       live.add(cell);
       t.style.left = `${c * metrics.stepX}px`;
       t.style.top = `${r * metrics.stepY + ROW_GAP / 2}px`;
-      const chained = !!cell.chain;
-      t.classList.toggle('chain', chained);
-      t.classList.toggle('chain-first', chained && row[c - 1]?.chain !== cell.chain);
-      t.classList.toggle('chain-last', chained && row[c + 1]?.chain !== cell.chain);
+      t.classList.toggle('locked', !!cell.chain);
+      t.classList.toggle('sideways', !!cell.sideways);
     }));
     for (const [cell, t] of tileEls) {
       if (!live.has(cell)) { t.remove(); tileEls.delete(cell); }
     }
+    placeWinTiles();
+  }
+
+  /** The fixed winning tile of each row, red-outlined, in its own column. */
+  function placeWinTiles() {
+    const key = board.winTiles.join(',');
+    if (winCol.dataset.key !== key) {
+      winCol.replaceChildren();
+      board.winTiles.forEach((tile) => {
+        const t = createTileEl({ tile }, winCol);
+        t.classList.add('win-tile');
+        t.title = 'Winning tile: completes the one unfinished group in this row';
+        winCol.appendChild(t);
+      });
+      winCol.dataset.key = key;
+    }
+    [...winCol.children].forEach((t, r) => {
+      t.style.left = '0px';
+      t.style.top = `${r * metrics.stepY + ROW_GAP / 2}px`;
+    });
   }
 
   /**
@@ -214,10 +261,31 @@ export function createBoardView(host, { onMove }) {
     placeTiles();
     updateArrows();
     drawHighlight();
+    drawHoverCell();
     if (animate) animateFrom(before, move);
   }
 
+  /** Colored boxes around valid closed groups: pair yellow, triplet green, sequence blue. */
+  function drawBoxes(evals, hints) {
+    boxes.forEach((b) => b.remove());
+    boxes = [];
+    if (!hints) return;
+    evals.forEach((e, r) => e.groups.forEach((g) => {
+      const b = el('div', `box box-${g.type}${g.wait ? ' box-wait' : ''}`, tiles);
+      Object.assign(b.style, {
+        left: `${g.col * metrics.stepX}px`,
+        top: `${r * metrics.stepY + ROW_GAP / 2}px`,
+        width: `${g.len * metrics.stepX}px`,
+        height: `${metrics.stepX}px`,
+        animationDelay: `${UI.animationMs}ms`,
+      });
+      boxes.push(b);
+    }));
+  }
+
   function setRowStatus(evals, { hints }) {
+    lastStatus = [evals, { hints }];
+    drawBoxes(evals, hints);
     evals.forEach((e, r) => {
       const seat = board.seatWinds[r];
       const st = statusEls[r];
@@ -232,8 +300,11 @@ export function createBoardView(host, { onMove }) {
       let cls = '';
       if (e.status === 'solved') {
         cls = 'solved';
-        state.textContent = '✓ Win';
-        state.title = e.yaku.join('\n');
+        state.textContent = `✓ ${e.points.toLocaleString()}`;
+        state.title = [
+          ...e.yakuHan.map((y) => `${y.name}: ${y.han} han`),
+          `${e.han} han ${e.fu} fu${e.limit ? ` (${e.limit})` : ''}`,
+        ].join('\n');
       } else if (hints) {
         if (e.status === 'noyaku') { cls = 'noyaku'; state.textContent = 'No yaku'; }
         else if (e.status === 'reorder') { cls = 'noyaku'; state.textContent = 'Tiles OK, reorder'; }
@@ -242,17 +313,20 @@ export function createBoardView(host, { onMove }) {
       if (cls) state.classList.add(cls);
       stripes[r].className = `stripe${hints || cls === 'solved' ? ` ${cls}` : ''}`;
     });
-    // Red outline on each row's drawn tile (last loose tile).
-    for (const t of tileEls.values()) t.classList.remove('drawn');
-    evals.forEach((e, r) => {
-      const cell = board.cells[r][e.drawnCol];
-      if (cell) tileEls.get(cell)?.classList.add('drawn');
-    });
+    [...winCol.children].forEach((t, r) => t.classList.toggle('solved', evals[r].status === 'solved'));
+
+    // Red highlight on tiles the winning tile would complete into a group.
+    for (const t of tileEls.values()) t.classList.remove('wait');
+    if (!hints) return;
+    evals.forEach((e, r) => e.waitCols.forEach((c) => {
+      tileEls.get(board.cells[r][c])?.classList.add('wait');
+    }));
   }
 
   function setLocked(locked) {
     root.classList.toggle('locked', locked);
     drawHighlight();
+    drawHoverCell();
   }
 
   window.addEventListener('resize', () => {
@@ -260,7 +334,14 @@ export function createBoardView(host, { onMove }) {
     applyMetrics();
     placeTiles();
     drawHighlight();
+    drawHoverCell();
+    if (lastStatus) setRowStatus(...lastStatus);
   });
 
-  return { setBoard, setRowStatus, setLocked };
+  return {
+    setBoard,
+    setRowStatus,
+    setLocked,
+    getHover: () => (root.classList.contains('locked') ? null : hoverCell),
+  };
 }

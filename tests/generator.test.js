@@ -43,9 +43,15 @@ for (const difficulty of Object.keys(DIFFICULTIES)) {
 }
 
 test('scoring formula', () => {
-  // shantenSum = (2+1)+(1+1) = 5; 5/10 * (10 + 40) * 1000 = 25000
-  assert.equal(computeScore({ startShanten: [2, 1], moves: 10, seconds: 60, solved: true }), 25000);
-  // time term clamps at base 10 after timeCap seconds
-  assert.equal(computeScore({ startShanten: [2, 1], moves: 10, seconds: 500, solved: true }), 5000);
-  assert.equal(computeScore({ startShanten: [2, 1], moves: 10, seconds: 5, solved: false }), 0);
+  const base = { startShanten: [2, 1], handPoints: [2000, 1000], moves: 10, solved: true };
+  // shantenSum 5; 5/10 × (10 + 80) × 1000 × (2,000,000 / max(1, ceil(20 − 30)))
+  assert.equal(computeScore({ ...base, seconds: 20 }), 90_000_000_000);
+  // time term clamps at 10; hand term divides by ceil(130 − 30) = 100
+  assert.equal(computeScore({ ...base, seconds: 130 }), 100_000_000);
+  assert.equal(computeScore({ ...base, seconds: 5, solved: false }), 0);
+});
+
+test('solved boards carry hand points', () => {
+  const p = generatePuzzle('points', 'hard');
+  for (const e of evaluateBoard(p.solved)) assert.ok(e.points >= 1000, `row worth ${e.points}`);
 });

@@ -90,18 +90,24 @@ function addRedFives(rng, hand) {
 }
 
 /**
- * Solved row layout: closed groups in ascending order, one group missing a tile (the wait),
- * then that tile as the drawn tile, then the open melds as chains at the right end.
+ * Solved row layout: closed groups in ascending order with one group missing a tile (the wait),
+ * then the open melds as chains at the right end. The missing tile becomes the fixed winning tile.
+ * Returns { cells (13), winTile }.
  */
 function layoutRow(rng, r, hand) {
   const groups = hand.groups.map(sortTiles).sort((a, b) => sortKey(a[0]) - sortKey(b[0]));
   const wait = rng.pick(groups);
-  const [drawn] = wait.splice(rng.int(wait.length), 1);
-  return [
+  const [winTile] = wait.splice(rng.int(wait.length), 1);
+  const cells = [
     ...groups.flat().map((tile) => ({ tile, chain: null })),
-    { tile: drawn, chain: null },
-    ...hand.melds.flatMap((tiles, k) => sortTiles(tiles).map((tile) => ({ tile, chain: `r${r}m${k}` }))),
+    ...hand.melds.flatMap((tiles, k) => {
+      const sideways = rng.int(tiles.length); // the "called" tile, drawn rotated
+      return sortTiles(tiles).map((tile, i) => (i === sideways
+        ? { tile, chain: `r${r}m${k}`, sideways: true }
+        : { tile, chain: `r${r}m${k}` }));
+    }),
   ];
+  return { cells, winTile };
 }
 
 function generateRow(rng, r, { openCount, seatWind, roundWind }) {
@@ -115,7 +121,7 @@ function generateRow(rng, r, { openCount, seatWind, roundWind }) {
     if (!hand) continue;
     addRedFives(rng, hand);
     const row = layoutRow(rng, r, hand);
-    if (evaluateOrdered(row, { seatWind, roundWind }).hasYaku) return row;
+    if (evaluateOrdered(row.cells, row.winTile, { seatWind, roundWind }).hasYaku) return row;
   }
   throw new Error(`Could not generate row ${r} with ${openCount} open sets`);
 }
@@ -124,9 +130,15 @@ export function generateSolvedBoard(rng, difficulty) {
   const diff = DIFFICULTIES[difficulty];
   const roundWind = rng.pick(GENERATION.roundWinds);
   const seatWinds = Array.from({ length: diff.rows }, (_, r) => GENERATION.seatWinds[r % GENERATION.seatWinds.length]);
-  const cells = seatWinds.map((seatWind, r) =>
+  const rows = seatWinds.map((seatWind, r) =>
     generateRow(rng, r, { openCount: rng.weightedIndex(diff.openSetWeights), seatWind, roundWind }));
-  return { cols: GENERATION.cols, cells, roundWind, seatWinds };
+  return {
+    cols: GENERATION.cols,
+    cells: rows.map((row) => row.cells),
+    winTiles: rows.map((row) => row.winTile),
+    roundWind,
+    seatWinds,
+  };
 }
 
 export function scrambleBoard(rng, board, count) {

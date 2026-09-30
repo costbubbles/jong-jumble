@@ -114,6 +114,7 @@ function update({ move = null, animate }) {
     view.setLocked(true);
     const score = computeScore({
       startShanten: state.puzzle.startShanten,
+      handPoints: state.evals.map((e) => e.points),
       moves: state.moves,
       seconds: state.solvedSeconds,
       solved: true,
@@ -124,7 +125,7 @@ function update({ move = null, animate }) {
       seconds: state.solvedSeconds,
       seed: state.seed,
       link: shareLink(),
-      yakuByRow: state.evals.map((e) => e.yaku),
+      rows: state.evals,
     }), UI.animationMs + 150);
   } else {
     view.setLocked(false);
@@ -159,11 +160,30 @@ const hud = createHud({
 });
 hud.setHints(state.hints);
 
+// Keyboard: Ctrl+Z undo; WASD / arrow keys shift the row or column of the tile under the mouse.
+const KEY_MOVES = {
+  w: 'up', arrowup: 'up',
+  s: 'down', arrowdown: 'down',
+  a: 'left', arrowleft: 'left',
+  d: 'right', arrowright: 'right',
+};
+
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.target.closest('input')) {
+  if (e.target.closest('input, select, textarea, dialog')) return;
+  const key = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && key === 'z') {
     e.preventDefault();
     undo();
+    return;
   }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const dir = KEY_MOVES[key];
+  const hover = view.getHover();
+  if (!dir || !hover) return;
+  e.preventDefault();
+  doMove(dir === 'up' || dir === 'down'
+    ? { type: 'col', col: hover.col, dir }
+    : { type: 'row', row: hover.row, dir });
 });
 
 setInterval(() => {

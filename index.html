@@ -39,13 +39,20 @@
     <details class="help">
       <summary>How to play</summary>
       <ul>
-        <li>Arrows rotate a row left/right or a column up/down. Tiles wrap around the edge.</li>
-        <li>Make <strong>every row</strong> a winning riichi hand: 4 sets + a pair (or seven pairs / kokushi).</li>
-        <li>Teal-framed tiles are <strong>open sets</strong> (pon/chii). They can't be split: a column
+        <li>Arrows rotate a row left/right or a column up/down. Tiles wrap around the edge.
+          Or hover a tile and press <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys.</li>
+        <li>Make <strong>every row</strong> a winning riichi hand, read left to right: sequences ascending
+          (4-5-6), triplets any order, pairs side by side.</li>
+        <li>The red-outlined tile in the <strong>Win</strong> column is each row's winning tile. It never moves.
+          It completes the one unfinished group in its row, wherever that group is (e.g. 5-6 … → 4).
+          The rest of that group still has to be in order.</li>
+        <li>Grey, smaller tiles are <strong>open sets</strong> (pon/chii) and can't be split. A column
           arrow on one moves all three columns, and it is blocked if another open set only partly overlaps.</li>
-        <li>Rows with no open sets count as riichi, so any complete shape wins. Rows with an open set need a
-          yaku (yakuhai, tanyao, honitsu, toitoi, …). Each row has its own seat wind; the round wind is shared.</li>
-        <li>The red-outlined last column is the winning tile. It's decoration only.</li>
+        <li>Rows with no open sets count as riichi. Rows with an open set need a yaku (yakuhai, tanyao,
+          honitsu, toitoi, …). Each row has its own seat wind; the round wind is shared.</li>
+        <li>Boxes show valid groups: <span style="color:var(--box-pair)">pairs</span>,
+          <span style="color:var(--box-pon)">triplets</span>, <span style="color:var(--box-chi)">sequences</span>.
+          Bigger hands (more han) score more.</li>
       </ul>
     </details>
   </main>
