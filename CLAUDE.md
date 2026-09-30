@@ -218,19 +218,14 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
 
 ### 6.1 Scoring (edit in `js/config.js` → `SCORING`; `js/core/scoring.js` only wraps it)
 ```
-score = ( (Σ over rows of (startShanten + 1)) / moves ) × ( 10 + max(0, floor(100 − seconds)) ) × 1000
-        × ( Π over rows of handPoints ) / max(1, ceil(seconds − 30))
+score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 ```
-- `handPoints` = each solved row's tsumo value in points (§4.2b). The product makes scores huge (10^15+ with
-  4 rows, beyond exact JS integer precision); accepted for now. Tune in config.
-- `startShanten` = each row's shanten on the **scrambled starting board** (computed at generation time).
-  The +1 per row means a row that starts at 0-shanten still counts for 1.
-- `moves` = the moves made (undo counts as a move, so it can't be exploited). It is always ≥ 1 because
-  the scramble never produces a solved row.
-- `seconds` = time from the first move to the solve. The time term is clamped, so it stays ≥ 10.
-- An unsolved round (MP time-out) scores **0**.
-- `SCORING` holds `base = 10`, `timeCap = 100`, `multiplier = 1000`, `handTimeOffset = 30`, `formula()`,
-  and `round`. `computeScore({ startShanten[], handPoints[], moves, seconds, solved })` is the only
+- `handPoints` = each solved row's tsumo value in points (§4.2b). Solving within 30 s (`graceSeconds`) keeps
+  the full hand total; after that it is divided by the extra seconds.
+- `formula()` also receives `moves` and `shantenSum` (Σ over rows of start shanten + 1) so they can be
+  added back later; they are currently unused. Undo still counts as a move.
+- An unsolved round (MP time-out) scores **0**. The display rounds to an integer (`SCORING.round`).
+- `computeScore({ startShanten[], handPoints[], moves, seconds, solved })` in `js/core/scoring.js` is the only
   caller. SP, MP clients, and the server all use it.
 - The URL carries `?seed=…&d=easy|medium|hard`.
 - Moves are animated with FLIP slides; wrapped tiles slide in from the edge.

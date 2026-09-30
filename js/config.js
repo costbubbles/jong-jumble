@@ -5,23 +5,19 @@
 // ---------------------------------------------------------------------------
 // Scoring (single player and multiplayer both use this)
 // ---------------------------------------------------------------------------
-// score = ((Σ(startShanten + 1) / moves) × (base + max(0, floor(timeCap − seconds)))) × multiplier
-//         × (Π handPoints / max(1, ceil(seconds − handTimeOffset)))
-//   shantenSum : sum over rows of (row shanten on the scrambled start board + 1)
-//   moves      : moves made, undo included
-//   seconds    : time from first move to solve
+// score = Σ handPoints / max(1, seconds − graceSeconds)
+//
+// Variables available to formula() (use any of them if you change it):
 //   handPoints : each solved row's riichi tsumo value in points (e.g. [2000, 3900, 8000])
+//   seconds    : time from first move to solve
+//   moves      : moves made, undo included
+//   shantenSum : sum over rows of (row shanten on the scrambled start board + 1)
 // An unsolved round always scores 0 (handled in js/core/scoring.js).
 export const SCORING = {
-  base: 10,
-  timeCap: 100,
-  multiplier: 1000,
-  handTimeOffset: 30,
-  formula({ shantenSum, moves, seconds, handPoints }) {
-    const timeTerm = this.base + Math.max(0, Math.floor(this.timeCap - seconds));
-    const handProduct = handPoints.reduce((product, p) => product * p, 1);
-    const handTerm = handProduct / Math.max(1, Math.ceil(seconds - this.handTimeOffset));
-    return (shantenSum / moves) * timeTerm * this.multiplier * handTerm;
+  graceSeconds: 30,   // solving within this many seconds gets the full hand total
+  formula({ handPoints, seconds }) {
+    const handSum = handPoints.reduce((sum, p) => sum + p, 0);
+    return handSum / Math.max(1, seconds - this.graceSeconds);
   },
   // How the raw formula value is turned into the displayed integer.
   round: Math.round,
