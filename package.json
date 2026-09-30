@@ -1,0 +1,14 @@
+{
+  "name": "mahjong-rows",
+  "version": "0.1.0",
+  "description": "Riichi mahjong sliding-tile puzzle (HTML5)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\"",
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
