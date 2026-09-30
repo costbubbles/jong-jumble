@@ -9,7 +9,7 @@ import { MULTIPLAYER } from '../js/config.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PORT = Number(process.env.PORT) || MULTIPLAYER.port;
-const PUBLIC = ['index.html', 'css', 'js', 'sprites']; // only these are served
+const PUBLIC = ['index.html', 'css', 'js', 'sprites', 'assets']; // only these are served
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',

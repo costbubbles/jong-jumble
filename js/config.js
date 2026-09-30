@@ -64,6 +64,14 @@ export const UI = {
 };
 
 // ---------------------------------------------------------------------------
+// Home screen
+// ---------------------------------------------------------------------------
+export const HOME = {
+  shiftEveryMs: 1100,   // average time between wall shifts (randomized ±40%)
+  shiftMs: 450,         // slide duration of one wall shift
+};
+
+// ---------------------------------------------------------------------------
 // Multiplayer (defaults for the host's match settings)
 // ---------------------------------------------------------------------------
 export const MULTIPLAYER = {

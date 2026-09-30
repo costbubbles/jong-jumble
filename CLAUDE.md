@@ -1,4 +1,4 @@
-# Mahjong Rows — riichi hand sliding puzzle (HTML5)
+# Jong Jumble — riichi hand sliding puzzle (HTML5)
 
 A browser puzzle game. The board is a playfield of mahjong tiles with **R rows × 13 columns**, plus a fixed
 **winning-tile column** on the right. Arrow controls on the edges rotate rows and columns of the playfield
@@ -247,6 +247,17 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 
 ---
 
+## 6.2 Home screen (`js/ui/home.js`, `assets/home/`)
+- Matches the user's 1920×1080 mockup: authored on a 1920×1080 `.home-stage` that JS scales to fit the window
+  (anchored left, centered vertically; the wall bleeds right/up/down for other aspect ratios).
+- Title and button labels are pixel art extracted from the mockup (`assets/home/*.png`, alpha = ink coverage so
+  anti-aliased edges match). The buttons are CSS "stretched tiles": 4px gold rim (#baa30b) + 3px grey inner rim.
+- **Wall:** 20 × 14 random tiles (sprites at 128 px) on a plane transformed by a `matrix3d` homography fitted to
+  the mockup's tile seams (mean error 0.55 px). Every ~1.1 s (`HOME` in config) a random visible row or column
+  shifts by one with a slide; wrapped tiles slide in from outside the wall edge. Off with prefers-reduced-motion.
+- Flow: the home screen shows on launch; **Solo** → game; **1v1** → "coming soon" until multiplayer exists.
+  The in-game title returns home. Shared links with `?seed=` skip the home screen.
+
 ## 7. Multiplayer: live head-to-head (`server/`, `js/net/`)
 
 - `server/server.js`: Node + `ws`. It serves the static files and manages **rooms**.
@@ -287,6 +298,8 @@ js/core/generator.js         # solved board + scramble
 js/core/scoring.js           # computeScore (wraps config SCORING)
 js/ui/render.js              # DOM board, arrows, chains, animations
 js/ui/hud.js                 # seed/difficulty, counters, buttons, win modal
+js/ui/home.js                # home screen: title, Solo/1v1, animated perspective wall
+assets/home/*.png            # title / label / icon art extracted from the home mockup
 js/net/client.js             # WebSocket client + lobby UI
 server/server.js             # static server + rooms + authoritative replay
 tests/*.test.js              # node --test

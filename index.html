@@ -3,14 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mahjong Rows</title>
+  <title>Jong Jumble</title>
   <link rel="icon" href="sprites/Red.png">
   <link rel="stylesheet" href="css/style.css">
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
+  <section id="home" class="home" hidden>
+    <div class="home-stage">
+      <div class="home-wall" aria-hidden="true"></div>
+      <h1 class="home-title">
+        <img class="title-jong" src="assets/home/title-jong.png" alt="Jong">
+        <img class="title-jumble" src="assets/home/title-jumble.png" alt="Jumble">
+      </h1>
+      <button type="button" class="home-btn btn-solo">
+        <img class="btn-icon" src="assets/home/icon-chun.png" alt="">
+        <img class="btn-label label-solo" src="assets/home/label-solo.png" alt="Solo">
+      </button>
+      <button type="button" class="home-btn btn-1v1">
+        <img class="btn-icon" src="assets/home/icon-chun.png" alt="">
+        <img class="btn-label label-1v1" src="assets/home/label-1v1.png" alt="1v1">
+        <img class="btn-icon btn-icon-right" src="assets/home/icon-hatsu.png" alt="">
+      </button>
+      <p class="home-toast" role="status" hidden></p>
+    </div>
+  </section>
+
+  <div id="game">
   <header class="topbar">
-    <h1>Mahjong Rows</h1>
+    <h1><a href="./" id="home-link" title="Back to the home screen">Jong Jumble</a></h1>
     <form id="seed-form" class="controls">
       <label>Seed <input id="seed-input" placeholder="random" autocomplete="off" maxlength="32" spellcheck="false"></label>
       <label>Difficulty <select id="difficulty"></select></label>
@@ -65,6 +86,7 @@
       </ul>
     </details>
   </main>
+  </div>
 
   <dialog id="win-dialog">
     <h2>Solved!</h2>

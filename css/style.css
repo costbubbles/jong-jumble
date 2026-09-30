@@ -68,6 +68,8 @@ input, select {
   border-bottom: 1px solid #332a4a;
 }
 .topbar h1 { margin: 0; font-size: 1.3rem; letter-spacing: 0.02em; }
+.topbar h1 a { color: inherit; text-decoration: none; }
+.topbar h1 a:hover { color: #fff; text-decoration: underline; }
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .controls label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 #seed-input { width: 9em; color: var(--text); }
@@ -317,3 +319,80 @@ dialog h2 { margin: 0 0 4px; color: var(--solved); }
 .share { display: flex; gap: 8px; margin-bottom: 16px; }
 .share input { flex: 1; min-width: 0; }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ------------------------------------------------------------------ home screen
+   Authored on a 1920×1080 stage that matches the design mockup; js/ui/home.js scales it to fit. */
+
+.home {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  background: #fff;
+  color-scheme: light;
+}
+.home-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+}
+.home-wall {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  overflow: hidden;            /* clips wrapped tiles at the wall's left edge */
+  backface-visibility: hidden;
+}
+.wall-tile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.home-title { margin: 0; }
+.home-title img { position: absolute; display: block; user-select: none; -webkit-user-drag: none; }
+.title-jong { left: 30px; top: 59px; width: 507px; height: 117px; }
+.title-jumble { left: 29px; top: 267px; width: 588px; height: 356px; }
+
+/* Buttons are drawn like a stretched tile: gold rim + grey inner rim. */
+.home-btn {
+  position: absolute;
+  width: 446px;
+  height: 120px;
+  padding: 0;
+  background: #fff;
+  border: 4px solid #baa30b;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 3px #bbb;
+  cursor: pointer;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.home-btn:hover { background: #fff; transform: translate(-3px, -3px); box-shadow: inset 0 0 0 3px #bbb, 6px 6px 0 rgba(0, 0, 0, 0.15); }
+.home-btn:active { transform: translate(0, 0); box-shadow: inset 0 0 0 3px #bbb; }
+.home-btn:focus-visible { outline: 4px solid #c54749; outline-offset: 4px; }
+.btn-solo { left: 79px; top: 718px; }
+.btn-1v1 { left: 201px; top: 898px; }
+.home-btn img { position: absolute; display: block; user-select: none; -webkit-user-drag: none; }
+.btn-icon { left: 9px; top: 4px; width: 104px; height: 104px; }
+.btn-icon-right { left: 329px; width: 102px; }
+.btn-label { top: 28px; height: 56px; }
+.label-solo { left: 148px; width: 236px; }
+.label-1v1 { left: 135px; width: 168px; }
+
+.home-toast {
+  position: absolute;
+  left: 201px;
+  top: 1030px;
+  margin: 0;
+  font: 700 28px/1.2 system-ui, sans-serif;
+  color: #2a2a2a;
+}

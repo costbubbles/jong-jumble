@@ -8,6 +8,7 @@ import { computeScore } from './core/scoring.js';
 import { randomSeed } from './core/rng.js';
 import { createBoardView } from './ui/render.js';
 import { createHud } from './ui/hud.js';
+import { createHome } from './ui/home.js';
 
 const HINTS_KEY = 'mahjong-rows.hints';
 const CONTROLS_KEY = 'mahjong-rows.controls';
@@ -188,7 +189,7 @@ const KEY_MOVES = {
 };
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, select, textarea, dialog')) return;
+  if (gameEl.hidden || e.target.closest('input, select, textarea, dialog')) return;
   const key = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && key === 'z') {
     e.preventDefault();
@@ -209,5 +210,38 @@ setInterval(() => {
   if (state.startedAt !== null && !isSolved()) renderStats();
 }, 250);
 
+// ---------------------------------------------------------------------------
+// Screens: home (title + Solo / 1v1) and the game. Shared puzzle links skip the home screen.
+
+const gameEl = document.getElementById('game');
+const toast = document.querySelector('.home-toast');
+
+function showGame() {
+  home.hide();
+  gameEl.hidden = false;
+  window.dispatchEvent(new Event('resize')); // board metrics depend on the now-visible layout
+}
+
+function showHome() {
+  gameEl.hidden = true;
+  toast.hidden = true;
+  home.show();
+}
+
+const home = createHome(document.getElementById('home'), {
+  onSolo: showGame,
+  onVersus: () => {
+    toast.textContent = '1v1 is coming soon!';
+    toast.hidden = false;
+  },
+});
+
+document.getElementById('home-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  showHome();
+});
+
 const params = new URLSearchParams(location.search);
 newPuzzle({ seed: params.get('seed') ?? '', difficulty: params.get('d') ?? DEFAULT_DIFFICULTY });
+if (params.has('seed')) showGame();
+else showHome();

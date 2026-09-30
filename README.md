@@ -1,4 +1,4 @@
-# Mahjong Rows
+# Jong Jumble
 
 A riichi mahjong sliding-tile puzzle for the browser. Rotate rows and columns until every row is a
 winning hand with at least one yaku.
@@ -26,6 +26,7 @@ settings) are in [`js/config.js`](js/config.js).
 ```
 index.html, css/        page + styles
 sprites/                tile art (32x32 PNG)
+assets/home/            home screen title and button art
 js/config.js            all tunable settings + scoring formula
 js/core/                pure game logic, shared by browser, server and tests
 js/ui/                  rendering + HUD
