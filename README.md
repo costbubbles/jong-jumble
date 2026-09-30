@@ -11,8 +11,7 @@ Requires Node.js 20+.
 
 ```sh
 npm test          # run the logic tests
-npm start         # game + multiplayer server on http://localhost:8080 (from phase 6)
-npx serve .       # single player only, any static file server works
+npm start         # play at http://localhost:8080 (no dependencies to install)
 ```
 
 ES modules don't load from `file://`, so open the game through a server.

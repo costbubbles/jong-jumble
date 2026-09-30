@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mahjong Rows</title>
+  <link rel="icon" href="sprites/Red.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Mahjong Rows</h1>
+    <form id="seed-form" class="controls">
+      <label>Seed <input id="seed-input" placeholder="random" autocomplete="off" maxlength="32" spellcheck="false"></label>
+      <label>Difficulty <select id="difficulty"></select></label>
+      <button type="submit" class="primary">Play</button>
+    </form>
+  </header>
+
+  <main>
+    <section class="hud">
+      <div class="stats">
+        <div class="stat"><span class="label">Round</span><span id="round-wind">–</span></div>
+        <div class="stat"><span class="label">Moves</span><span id="moves">0</span></div>
+        <div class="stat"><span class="label">Time</span><span id="time">0:00</span></div>
+        <div class="stat"><span class="label">Seed</span><span id="seed-display">–</span></div>
+      </div>
+      <div class="buttons">
+        <button id="undo" type="button" title="Undo (Ctrl+Z). Counts as a move.">Undo</button>
+        <button id="restart" type="button" title="Back to the scrambled start of this puzzle">Restart</button>
+        <button id="new" type="button">New puzzle</button>
+        <label class="toggle"><input type="checkbox" id="hints"> Hints</label>
+      </div>
+    </section>
+
+    <div id="board-host" class="board-host"></div>
+
+    <details class="help">
+      <summary>How to play</summary>
+      <ul>
+        <li>Arrows rotate a row left/right or a column up/down. Tiles wrap around the edge.</li>
+        <li>Make <strong>every row</strong> a winning riichi hand: 4 sets + a pair (or seven pairs / kokushi).</li>
+        <li>Teal-framed tiles are <strong>open sets</strong> (pon/chii). They can't be split: a column
+          arrow on one moves all three columns, and it is blocked if another open set only partly overlaps.</li>
+        <li>Rows with no open sets count as riichi, so any complete shape wins. Rows with an open set need a
+          yaku (yakuhai, tanyao, honitsu, toitoi, …). Each row has its own seat wind; the round wind is shared.</li>
+        <li>The red-outlined last column is the winning tile. It's decoration only.</li>
+      </ul>
+    </details>
+  </main>
+
+  <dialog id="win-dialog">
+    <h2>Solved!</h2>
+    <p class="score"><span id="win-score">0</span><small>points</small></p>
+    <dl class="win-stats">
+      <dt>Moves</dt><dd id="win-moves"></dd>
+      <dt>Time</dt><dd id="win-time"></dd>
+      <dt>Seed</dt><dd id="win-seed"></dd>
+    </dl>
+    <ol id="win-yaku" class="win-yaku"></ol>
+    <div class="share">
+      <input id="share-link" readonly>
+      <button id="copy-link" type="button">Copy link</button>
+    </div>
+    <div class="dialog-buttons">
+      <button id="win-close" type="button">Close</button>
+      <button id="win-new" type="button" class="primary">New puzzle</button>
+    </div>
+  </dialog>
+</body>
+</html>

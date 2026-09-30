@@ -3,9 +3,9 @@
 
 import { DIFFICULTIES, GENERATION } from '../config.js';
 import { createRng } from './rng.js';
-import { fromIndex34, toIndex34, sortTiles } from './tiles.js';
-import { applyMove, inverseMove, legalMoves, meldType, moveKey } from './board.js';
-import { evaluateBoard, evaluateHand } from './yaku.js';
+import { fromIndex34, toIndex34, sortTiles, sortKey } from './tiles.js';
+import { applyMove, inverseMove, legalMoves, moveKey } from './board.js';
+import { evaluateBoard, evaluateOrdered } from './yaku.js';
 
 const ALL = [...Array(34).keys()];
 
@@ -64,22 +64,22 @@ function makeStandardHand(rng, { openCount, theme, seatWind, roundWind }) {
   const pair = rng.pick(pairOptions);
 
   const openIdx = new Set(rng.shuffle([0, 1, 2, 3]).slice(0, openCount));
-  const closed = [fromIndex34(pair), fromIndex34(pair)];
+  const groups = [[fromIndex34(pair), fromIndex34(pair)]];
   const melds = [];
-  sets.forEach((s, k) => (openIdx.has(k) ? melds.push(setTiles(s)) : closed.push(...setTiles(s))));
-  return { closed, melds };
+  sets.forEach((s, k) => (openIdx.has(k) ? melds : groups).push(setTiles(s)));
+  return { groups, melds };
 }
 
 function makeChiitoiHand(rng) {
   const kinds = rng.shuffle(ALL).slice(0, 7);
-  return { closed: kinds.flatMap((i) => [fromIndex34(i), fromIndex34(i)]), melds: [] };
+  return { groups: kinds.map((i) => [fromIndex34(i), fromIndex34(i)]), melds: [] };
 }
 
 /** Per suit, maybe turn one 5 into a red five (at most one red per suit per row). */
 function addRedFives(rng, hand) {
   for (const st of ['m', 'p', 's']) {
     const spots = [];
-    for (const arr of [hand.closed, ...hand.melds]) {
+    for (const arr of [...hand.groups, ...hand.melds]) {
       arr.forEach((t, i) => { if (t === `5${st}`) spots.push([arr, i]); });
     }
     if (spots.length && rng.chance(GENERATION.redFiveChance)) {
@@ -89,7 +89,21 @@ function addRedFives(rng, hand) {
   }
 }
 
-/** A solved row: sorted closed tiles, then each open meld as a chain at the right end. */
+/**
+ * Solved row layout: closed groups in ascending order, one group missing a tile (the wait),
+ * then that tile as the drawn tile, then the open melds as chains at the right end.
+ */
+function layoutRow(rng, r, hand) {
+  const groups = hand.groups.map(sortTiles).sort((a, b) => sortKey(a[0]) - sortKey(b[0]));
+  const wait = rng.pick(groups);
+  const [drawn] = wait.splice(rng.int(wait.length), 1);
+  return [
+    ...groups.flat().map((tile) => ({ tile, chain: null })),
+    { tile: drawn, chain: null },
+    ...hand.melds.flatMap((tiles, k) => sortTiles(tiles).map((tile) => ({ tile, chain: `r${r}m${k}` }))),
+  ];
+}
+
 function generateRow(rng, r, { openCount, seatWind, roundWind }) {
   for (let attempt = 0; attempt < GENERATION.maxRowAttempts; attempt++) {
     const hand = openCount === 0 && rng.chance(GENERATION.chiitoiChance)
@@ -100,16 +114,8 @@ function generateRow(rng, r, { openCount, seatWind, roundWind }) {
       });
     if (!hand) continue;
     addRedFives(rng, hand);
-    const result = evaluateHand({
-      closed: hand.closed,
-      melds: hand.melds.map((tiles) => ({ tiles, type: meldType(tiles) })),
-      seatWind, roundWind,
-    });
-    if (!result.solved) continue;
-    return [
-      ...sortTiles(hand.closed).map((tile) => ({ tile, chain: null })),
-      ...hand.melds.flatMap((tiles, k) => sortTiles(tiles).map((tile) => ({ tile, chain: `r${r}m${k}` }))),
-    ];
+    const row = layoutRow(rng, r, hand);
+    if (evaluateOrdered(row, { seatWind, roundWind }).hasYaku) return row;
   }
   throw new Error(`Could not generate row ${r} with ${openCount} open sets`);
 }

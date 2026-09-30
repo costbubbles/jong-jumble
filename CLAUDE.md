@@ -12,8 +12,8 @@ This file is the design spec and the build plan. Keep it up to date when decisio
 
 | Topic | Decision |
 |---|---|
-| Columns | **14** per row (13 + winning tile). Column 14 gets a red outline as the "agari" tile; this is **cosmetic only**. |
-| Hand validity | Winning shape **and at least 1 yaku**. |
+| Columns | **14** per row. The **last loose (non-chain) tile** in each row is the drawn/winning tile (red outline). It completes the row's one incomplete group, wherever that group is (§4.4). |
+| Hand validity | Winning shape **in a valid left-to-right order** (§4.4) **and at least 1 yaku**. |
 | Yaku context | Fully closed rows count as **riichi** (so they always have a yaku). Rows with an open set need a real yaku. Each row has its own **seat wind**; the **round wind** is shared by the puzzle. The win is always treated as **tsumo**. |
 | Open sets | **Pon + chii only** (3-tile chains, no kans). Chains can never be split. |
 | Row wrap | A chain wraps **as one unit** (see §3.2). |
@@ -110,8 +110,9 @@ Because the chains are the same before and after the move, the inverse is legal 
 
 ## 4. Hand evaluation (`js/core/hand.js`, `js/core/yaku.js`)
 
-Per row: `openMelds` = chains in the row (k of them), `closed` = the other 14 − 3k tiles. **Order in
-the row does not matter** for validity (it is a multiset); only chain membership does.
+Per row: `openMelds` = chains in the row (k of them), `closed` = the other 14 − 3k tiles.
+§4.1–4.3 treat the row as a **multiset** (used for shanten and hints). The actual win condition also
+requires **order** (§4.4).
 
 ### 4.1 Shape
 - **Standard:** `closed` splits into (4 − k) sets + 1 pair. Enumerate **all** decompositions, because
@@ -136,10 +137,24 @@ the row does not matter** for validity (it is a multiset); only chain membership
 
 ### 4.3 Shanten
 Standard shanten per row. With k open melds, compute it on the closed tiles with 4 − k sets needed.
-Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0).
-- `-1` + yaku → row **solved** (glow)
-- `-1` + no yaku → show a **"no yaku"** marker; the row does not count as solved
-- `n ≥ 0` → show `n` shanten
+Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0). **Order is ignored.**
+
+### 4.4 Ordered win rule (`evaluateOrdered` in `js/core/yaku.js`)
+- The **drawn tile** is the **last loose tile** in the row (chains to its right are fine).
+- The other loose tiles are read left to right. **Chains split them into separate runs**, so a group
+  can't span across a chain. Each run must split into contiguous groups:
+  - **Sequence:** ascending only (4-5-6 ✓, 6-5-4 ✗, 5-4-6 ✗). A red 5 counts as 5.
+  - **Triplet:** 3 identical tiles in any order (red 5 = 5).
+  - **Pair:** 2 identical tiles, side by side.
+- There is **exactly one wait group**, which the drawn tile completes: a single tile (tanki → pair), a pair
+  (shanpon → triplet), or two ascending tiles (ryanmen/penchan/kanchan → sequence).
+- Totals: 4 sets (chains included) + 1 pair. **Chiitoitsu:** 7 distinct adjacent pairs (one of them is the
+  tanki). **Kokushi:** any order.
+- Row status (`evaluateRow`):
+  - `solved`: ordered win with a yaku (the row glows)
+  - `noyaku`: the tiles win but no yaku is possible
+  - `reorder`: the tiles could win with a yaku but aren't in a valid order ("Tiles OK, reorder")
+  - `shanten`: shows `n`-shanten, or "Tenpai" for 0
 
 ---
 
@@ -154,7 +169,9 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
      random 4-sets + pair hand that respects the per-row tile limits. Sprinkle red fives by chance. If it has open
      sets, re-roll until `hasYaku` (bias the generation toward yakuhai / tanyao / honitsu so it doesn't loop).
      A small chance of a chiitoitsu hand when closed.
-  3. Lay the row out in sorted order with chains at the right end (like the reference image).
+  3. Lay the row out as sorted closed groups. Remove one random tile from one random group (the wait)
+     and place it as the drawn tile after the closed groups. Open melds go as chains at the right end
+     (like the reference image).
 - **Scramble:** apply N random **legal** moves (no immediate inverse). Re-roll if the result
   already has any solved row. Suggested N: Easy 20, Medium 40, Hard 70 (tune by playtesting).
 - **Save** `{ seed, difficulty, scrambleMoves }` for display/debug. There are many valid solutions
@@ -165,10 +182,12 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
 ## 6. UI (`index.html`, `css/`, `js/ui/`)
 
 - The layout matches the reference image: a dark board panel, arrows above every column (up) and below it (down),
-  and left/right arrows beside every row. Chains are drawn joined, with a frame around the 3 tiles.
-  Column 14 is outlined red.
-- Beside each row: seat wind badge, shanten / "no yaku" / ✓, and the yaku list on hover when solved.
-  The round wind is shown in the header.
+  and left/right arrows beside every row. Chains are drawn joined, with a teal frame around the 3 tiles.
+  Each row's drawn tile is outlined red.
+- Hovering an arrow highlights what will move. Blocked column arrows are grey and show the blocked columns.
+- Beside each row: seat wind badge, then Tenpai / n-shanten / "Tiles OK, reorder" / "No yaku" / ✓ Win
+  (the yaku list shows on hover). The round wind is shown in the header.
+- Ctrl+Z = undo.
 - **HUD:** seed field + difficulty selector, move counter, timer (starts on the first move), Undo.
   - **Restart:** the same puzzle, back to its scrambled start (clears the move history, timer, and move count).
   - **New / Reset:** if the seed was **random/empty**, roll a new seed and generate; if the user
@@ -248,20 +267,21 @@ package.json                 # "ws" dependency, scripts: start, test
 ## 9. Build phases
 
 1. ✅ **Core logic + tests:** tiles, rng, board moves, hand decomposition, shanten, yaku, generator,
-   scoring, config. 23 tests, including the reference-image hands and a 2000-move inverse random walk.
-2. **Rendering + controls:** a static board from a hard-coded state, arrows, chain frames, blocked
-   arrows, animations.
-3. **Generator:** the core is done in phase 1; this phase wires the seed input, difficulty picker, and URL params into the UI.
-4. **HUD / QoL:** moves, timer, undo, Restart, New/Reset, hints toggle, validity glow, shanten + "no yaku",
-   scoring, win modal.
-5. **Art:** the sprites are already present, so wire them in during phase 2. Nothing remains except checking the red fives.
+   scoring, config. 25 tests, including the reference-image hands, the ordering rules, and a 2000-move
+   inverse random walk.
+2. ✅ **Rendering + controls:** `js/ui/render.js` (DOM tiles with absolute positions, FLIP slide animation,
+   wrapped tiles slide in from the edge, hover highlights, blocked arrows).
+3. ✅ **Generator UI:** seed input, difficulty picker, URL params (`?seed=&d=`, seed only when typed).
+4. ✅ **HUD / QoL:** `js/ui/hud.js` + `js/main.js`: moves, timer, undo, Restart, New/Reset, hints toggle
+   (localStorage), row status, scoring, win dialog with share link.
+5. ✅ **Art:** all sprites wired in, red fives included.
 6. **Multiplayer:** server, rooms, host settings, best-of-N rounds with time limits, authoritative replay,
    hidden scores, end-of-match reveal.
 7. **Polish:** sound, mobile layout, keyboard/touch, tuning scramble depth.
 
 ## 10. Commands
-- Single player (no server): any static server, e.g. `npx serve .`. ES modules don't work over `file://`.
-- Multiplayer + static: `npm start` (runs `server/server.js`, reads `PORT`).
+- Play: `npm start` → http://localhost:8080. `server/server.js` is a zero-dependency static server (reads `PORT`)
+  that gets WebSocket rooms in phase 6. Any static server also works; ES modules don't work over `file://`.
 - Tests: `npm test` (`node --test "tests/**/*.test.js"`). Run them after any change in `js/core/` or `js/config.js`.
 
 ## 11. Repo and deploy
@@ -270,5 +290,6 @@ package.json                 # "ws" dependency, scripts: start, test
 - See README.md for details.
 
 ## 12. Open questions / tuning
+- Phone width: the board is ~14 × 32 px wide at minimum and scrolls horizontally. It needs a mobile layout (phase 7).
 - Scrambled starts currently sit at roughly 0–2 shanten per row. Tune `scrambleMoves` and `openSetWeights` in
   playtesting. The defaults in `js/config.js` are: 3 rounds, 180 s round limit, tiebreak = fewer total seconds.
