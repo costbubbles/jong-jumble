@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createBoard, applyMove, inverseMove, legalMoves, boardsEqual, columnMoveSet, rowHand, canMove,
+  createBoard, applyMove, inverseMove, legalMoves, boardsEqual, columnMoveSet, rowHand, canMove, expandSelection,
 } from '../js/core/board.js';
 import { createRng } from '../js/core/rng.js';
 
@@ -78,4 +78,40 @@ test('every legal move is undone by its inverse (random walk)', () => {
     assert.ok(boardsEqual(b, back), `inverse of ${JSON.stringify(move)} did not restore the board`);
     b = next;
   }
+});
+
+// ---------------------------------------------------------------------------
+// Drag & drop mode
+// ---------------------------------------------------------------------------
+
+const drop = (row, start, len, toRow, col) => ({ type: 'drop', from: { row, start, len }, to: { row: toRow, col } });
+
+test('drop within a row reorders and closes the gap', () => {
+  const b = createBoard({ rows: ['123456789m1234p 5p'] });
+  // move "2m 3m" (cols 1-2) so it starts at col 5
+  const next = applyMove(b, drop(0, 1, 2, 0, 5));
+  assert.equal(tilesOf(next, 0), '1m 4m 5m 6m 7m 2m 3m 8m 9m 1p 2p 3p 4p');
+  assert.ok(boardsEqual(applyMove(next, inverseMove(drop(0, 1, 2, 0, 5))), b));
+  assert.equal(applyMove(b, drop(0, 1, 2, 0, 1)), null); // no-op
+});
+
+test('drop into another row swaps with the tiles there', () => {
+  const b = createBoard({ rows: ['123456789m1234p 5p', '123456789s1234p 5s'] });
+  const next = applyMove(b, drop(0, 0, 3, 1, 10));
+  assert.equal(tilesOf(next, 0), '2p 3p 4p 4m 5m 6m 7m 8m 9m 1p 2p 3p 4p');
+  assert.equal(tilesOf(next, 1), '1s 2s 3s 4s 5s 6s 7s 8s 9s 1p 1m 2m 3m');
+  assert.deepEqual(next.winTiles, ['5p', '5s']);
+  assert.ok(boardsEqual(applyMove(next, inverseMove(drop(0, 0, 3, 1, 10))), b));
+});
+
+test('drops that would split a chain are refused', () => {
+  const b = createBoard({ rows: ['12m [222z] 3456789m1p 5p', '123456789s1234p 5s'] });
+  assert.equal(applyMove(b, drop(0, 2, 2, 1, 0)), null);      // part of the chain
+  assert.equal(applyMove(b, drop(1, 0, 1, 0, 3)), null);      // swapping into the middle of it
+  assert.equal(applyMove(b, drop(0, 0, 1, 0, 3)), null);      // reinserting inside it
+  const whole = applyMove(b, drop(0, 2, 3, 1, 0));            // the whole chain moves rows
+  assert.ok(whole);
+  assert.equal(rowHand(whole, 1).melds[0].type, 'pon');
+  assert.deepEqual(expandSelection(b, { row: 0, start: 3, len: 1 }), { row: 0, start: 2, len: 3 });
+  assert.deepEqual(expandSelection(b, { row: 0, start: 1, len: 2 }), { row: 0, start: 1, len: 4 });
 });

@@ -74,15 +74,17 @@ test('valid groups are reported for boxes', () => {
   assert.deepEqual(e.groups.map((g) => `${g.type}@${g.col}`), ['chi@0', 'pair@3', 'chi@7', 'pon@10']);
   const won = row('123s 05s 78p 123m 444m 9p');
   assert.ok(won.groups.some((g) => g.wait === 'ryanmen' && g.col === 5 && g.len === 2));
-  assert.deepEqual(won.waitCols, [5, 6]);
+  assert.deepEqual(won.waits, [{ col: 5, len: 2 }]);
 });
 
 test('tiles the winning tile would complete are found', () => {
   // win 4m: 56m (cols 0-1) ryanmen, 35m (cols 3-4) kanchan, lone 4m (col 6); 9p 1s unrelated
   const e = row('56m 9p 35m 1s 4m 123456z 4m');
-  assert.deepEqual(e.waitCols, [0, 1, 3, 4, 6]);
+  assert.deepEqual(e.waits, [{ col: 0, len: 2 }, { col: 3, len: 2 }, { col: 6, len: 1 }]);
+  // an adjacent pair of the winning tile is one box (shanpon), not two singles
+  assert.deepEqual(row('44m 123456789p 11s 4m').waits, [{ col: 0, len: 2 }]);
   // not across a chain, and not descending
-  assert.deepEqual(row('5m [111z] 6m 65m 9999p 11s 4m').waitCols, []);
+  assert.deepEqual(row('5m [111z] 6m 65m 9999p 11s 4m').waits, []);
 });
 
 test('chiitoitsu needs adjacent pairs; kokushi any order', () => {

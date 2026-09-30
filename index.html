@@ -31,6 +31,13 @@
         <button id="restart" type="button" title="Back to the scrambled start of this puzzle">Restart</button>
         <button id="new" type="button">New puzzle</button>
         <label class="toggle"><input type="checkbox" id="hints"> Hints</label>
+        <label class="toggle" title="Shift: arrows, WASD, or drag a tile to rotate its row/column.&#10;Drag &amp; drop: click tiles to select an adjacent run, then drag it to another row (swap) or within its row (reorder).">
+          Controls
+          <select id="control-mode">
+            <option value="shift">Shift</option>
+            <option value="drop">Drag &amp; drop</option>
+          </select>
+        </label>
       </div>
     </section>
 
@@ -39,8 +46,10 @@
     <details class="help">
       <summary>How to play</summary>
       <ul>
-        <li>Arrows rotate a row left/right or a column up/down. Tiles wrap around the edge.
-          Or hover a tile and press <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys.</li>
+        <li><strong>Shift controls:</strong> arrows rotate a row left/right or a column up/down (tiles wrap
+          around). Or drag a tile, or hover it and press <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys.</li>
+        <li><strong>Drag &amp; drop controls</strong> (Controls menu): click tiles to select an adjacent run in one
+          row, then drag it onto another row to swap, or elsewhere in its row to reorder.</li>
         <li>Make <strong>every row</strong> a winning riichi hand, read left to right: sequences ascending
           (4-5-6), triplets any order, pairs side by side.</li>
         <li>The red-outlined tile in the <strong>Win</strong> column is each row's winning tile. It never moves.

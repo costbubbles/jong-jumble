@@ -238,27 +238,35 @@ export function findGroups(cells) {
 }
 
 /**
- * Playfield columns holding tiles that the winning tile `w` would complete into a group:
- * a single copy of w (→ pair), an adjacent pair of w (→ triplet), or two adjacent ascending tiles
- * that w turns into a sequence (ryanmen / penchan / kanchan).
+ * Partial groups in the playfield that the winning tile `w` would complete, as boxes
+ * [{ col, len }]: an adjacent pair of w (-> triplet), a lone copy of w (-> pair), or two adjacent
+ * ascending tiles that w turns into a sequence (ryanmen / penchan / kanchan). Boxes may overlap.
  */
-export function findWaitCols(cells, winTile) {
+export function findWaitGroups(cells, winTile) {
   const w = toIndex34(winTile);
-  const cols = new Set();
+  const groups = [];
   for (const run of looseRuns(cells)) {
+    const inPair = new Set();
     run.forEach(({ idx, col }, i) => {
-      if (idx === w) cols.add(col);
       const next = run[i + 1];
-      if (!next || w >= 27 || idx >= 27) return;
+      if (!next) return;
       const [a, b] = [idx, next.idx];
+      if (a === w && b === w) {
+        groups.push({ col, len: 2 });
+        inPair.add(col).add(next.col);
+        return;
+      }
+      if (w >= 27 || a >= 27) return;
       const sameSuit = Math.floor(a / 9) === Math.floor(b / 9) && Math.floor(a / 9) === Math.floor(w / 9);
       if (sameSuit && ((b === a + 1 && (w === a - 1 || w === b + 1)) || (b === a + 2 && w === a + 1))) {
-        cols.add(col);
-        cols.add(next.col);
+        groups.push({ col, len: 2 });
       }
     });
+    for (const { idx, col } of run) {
+      if (idx === w && !inPair.has(col)) groups.push({ col, len: 1 });
+    }
   }
-  return [...cols].sort((x, y) => x - y);
+  return groups.sort((x, y) => x.col - y.col || x.len - y.len);
 }
 
 const NO_WIN = { complete: false, hasYaku: false, yaku: [], yakuHan: [], han: 0, fu: 0, points: 0, limit: '', groups: [] };
@@ -373,10 +381,10 @@ export function evaluateRow(board, r) {
     points: solved ? ordered.points : 0,
     limit: solved ? ordered.limit : '',
     groups: ordered.complete ? ordered.groups : findGroups(board.cells[r]),
-    // Tiles the winning tile would complete: just the wait group once the row wins.
-    waitCols: ordered.complete
-      ? ordered.groups.filter((g) => g.wait).flatMap((g) => Array.from({ length: g.len }, (_, i) => g.col + i))
-      : findWaitCols(board.cells[r], board.winTiles[r]),
+    // Boxes around tiles the winning tile would complete: just the wait group once the row wins.
+    waits: ordered.complete
+      ? ordered.groups.filter((g) => g.wait).map(({ col, len }) => ({ col, len }))
+      : findWaitGroups(board.cells[r], board.winTiles[r]),
   };
 }
 

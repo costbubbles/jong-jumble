@@ -4,10 +4,19 @@
 //   view.setBoard(board, { move, animate });   // move = the move just applied (for wrap animation)
 //   view.setRowStatus(evals, { hints });
 //   view.setLocked(true|false);
+//   view.setControlMode('shift' | 'drop');
 //   view.getHover();                            // { row, col } under the mouse, or null
+//
+// onMove(move) must return true if the move was applied (the view then receives setBoard).
+//
+// Pointer controls:
+//   shift mode: drag a tile sideways to shift its row, up/down to shift its column; one shift per
+//               tile dragged, applied live.
+//   drop mode:  click tiles to select an adjacent run in one row (chains are always selected whole),
+//               then drag the selection onto another row (swap) or elsewhere in its row (reorder).
 
 import { TILE_IMAGES, TILE_NAMES } from '../core/tiles.js';
-import { columnMoveSet } from '../core/board.js';
+import { applyMove, columnMoveSet, expandSelection } from '../core/board.js';
 import { UI } from '../config.js';
 
 const ARROW_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 L21 11.5 H16 V21.5 H8 V11.5 H3 Z"/></svg>';
@@ -53,17 +62,188 @@ export function createBoardView(host, { onMove }) {
   let lastStatus = null;   // [evals, opts] from the last setRowStatus, redrawn on resize
   const hoverEl = el('div', 'hover-cell');
   hoverEl.hidden = true;
+  const dropEl = el('div', 'drop-target');
+  dropEl.hidden = true;
+  let controlMode = 'shift';
+  let selection = null;    // drop mode: { row, start, len }
+  let drag = null;         // active pointer gesture
+
+  const isLocked = () => root.classList.contains('locked');
+
+  /** Playfield cell under a viewport point, or null (clamp = snap to the nearest cell instead). */
+  function cellAt(clientX, clientY, clamp = false) {
+    const rect = tiles.getBoundingClientRect();
+    let col = Math.floor((clientX - rect.left) / metrics.stepX);
+    let row = Math.floor((clientY - rect.top) / metrics.stepY);
+    if (clamp) {
+      col = Math.min(board.cols - 1, Math.max(0, col));
+      row = Math.min(board.cells.length - 1, Math.max(0, row));
+    }
+    const inside = row >= 0 && row < board.cells.length && col >= 0 && col < board.cols;
+    return inside ? { row, col } : null;
+  }
 
   tiles.addEventListener('mousemove', (e) => {
     if (!board) return;
-    const rect = tiles.getBoundingClientRect();
-    const col = Math.floor((e.clientX - rect.left) / metrics.stepX);
-    const row = Math.floor((e.clientY - rect.top) / metrics.stepY);
-    const inside = row >= 0 && row < board.cells.length && col >= 0 && col < board.cols;
-    hoverCell = inside ? { row, col } : null;
+    hoverCell = cellAt(e.clientX, e.clientY);
     drawHoverCell();
   });
   tiles.addEventListener('mouseleave', () => { hoverCell = null; drawHoverCell(); });
+
+  // ------------------------------------------------------------------ pointer: drag to shift / drag & drop
+
+  const DRAG_THRESHOLD = 6;
+
+  tiles.addEventListener('pointerdown', (e) => {
+    if (!board || isLocked() || e.button !== 0) return;
+    const cell = cellAt(e.clientX, e.clientY);
+    if (!cell) return;
+    e.preventDefault();
+    tiles.setPointerCapture(e.pointerId);
+    drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, cell, axis: null, moved: false };
+  });
+
+  tiles.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (controlMode === 'shift') dragShift(e);
+    else dragDrop(e);
+  });
+
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (controlMode === 'drop') {
+      if (!d.moved) clickSelect(d.cell);
+      else finishDrop(d);
+    }
+  };
+  tiles.addEventListener('pointerup', endDrag);
+  tiles.addEventListener('pointercancel', () => {
+    if (drag?.moved && controlMode === 'drop') { drag.move = null; finishDrop(drag); }
+    drag = null;
+  });
+
+  /** Shift mode: every full tile dragged along the locked axis applies one shift. */
+  function dragShift(e) {
+    let dx = e.clientX - drag.x0;
+    let dy = e.clientY - drag.y0;
+    if (!drag.axis) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < DRAG_THRESHOLD) return;
+      drag.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+    }
+    const { row, col } = drag.cell;
+    if (drag.axis === 'x') {
+      while (Math.abs(dx) >= metrics.stepX) {
+        const dir = dx > 0 ? 'right' : 'left';
+        onMove({ type: 'row', row, dir });
+        drag.x0 += dx > 0 ? metrics.stepX : -metrics.stepX;
+        dx = e.clientX - drag.x0;
+      }
+    } else {
+      while (Math.abs(dy) >= metrics.stepY) {
+        const dir = dy > 0 ? 'down' : 'up';
+        onMove({ type: 'col', col, dir }); // a blocked column just doesn't move
+        drag.y0 += dy > 0 ? metrics.stepY : -metrics.stepY;
+        dy = e.clientY - drag.y0;
+      }
+    }
+  }
+
+  /** Drop mode: drag the selection; show where it would land and whether that is allowed. */
+  function dragDrop(e) {
+    const dx = e.clientX - drag.x0;
+    const dy = e.clientY - drag.y0;
+    if (!drag.moved) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < DRAG_THRESHOLD) return;
+      const { row, col } = drag.cell;
+      const inSel = selection && selection.row === row
+        && col >= selection.start && col < selection.start + selection.len;
+      if (!inSel) selection = expandSelection(board, { row, start: col, len: 1 });
+      if (!selection) return;
+      drag.moved = true;
+      drag.from = selection;
+      drag.grab = col - selection.start;
+      drag.els = board.cells[row].slice(selection.start, selection.start + selection.len)
+        .map((cell) => tileEls.get(cell));
+      drawSelection();
+      drag.els.forEach((t) => t.classList.add('dragging'));
+    }
+    drag.els.forEach((t) => { t.style.transform = `translate(${dx}px, ${dy}px)`; });
+
+    const target = cellAt(e.clientX, e.clientY, true);
+    const len = drag.from.len;
+    const col = Math.min(board.cols - len, Math.max(0, target.col - drag.grab));
+    const move = { type: 'drop', from: drag.from, to: { row: target.row, col } };
+    const same = target.row === drag.from.row && col === drag.from.start;
+    drag.move = !same && applyMove(board, move) ? move : null;
+
+    if (!dropEl.parentNode) tiles.appendChild(dropEl);
+    dropEl.hidden = same;
+    dropEl.classList.toggle('invalid', !drag.move);
+    Object.assign(dropEl.style, {
+      left: `${col * metrics.stepX}px`,
+      top: `${target.row * metrics.stepY + ROW_GAP / 2}px`,
+      width: `${len * metrics.stepX}px`,
+      height: `${metrics.stepX}px`,
+    });
+  }
+
+  function finishDrop(d) {
+    dropEl.hidden = true;
+    const applied = d.move ? onMove(d.move) : false;
+    if (applied) return; // setBoard re-rendered; tiles slide from where they were dropped
+    // Refused: slide the tiles back into place.
+    for (const t of d.els ?? []) {
+      const from = t.style.transform;
+      t.style.transform = '';
+      t.classList.remove('dragging');
+      if (from) {
+        t.animate([{ transform: from }, { transform: 'translate(0, 0)' }],
+          { duration: UI.animationMs * 1.5, easing: 'ease-out' });
+      }
+    }
+  }
+
+  /** Drop mode click: build an adjacent selection in one row; clicking an end unit removes it. */
+  function clickSelect({ row, col }) {
+    const unit = expandSelection(board, { row, start: col, len: 1 });
+    if (!unit) return;
+    const uEnd = unit.start + unit.len - 1;
+    if (!selection || selection.row !== row) {
+      selection = unit;
+    } else {
+      const a = selection.start;
+      const b = a + selection.len - 1;
+      if (unit.start >= a && uEnd <= b) {
+        // Clicked inside: drop that unit if it is at an end, otherwise clear.
+        if (unit.start === a && uEnd === b) selection = null;
+        else if (unit.start === a) selection = { row, start: uEnd + 1, len: b - uEnd };
+        else if (uEnd === b) selection = { row, start: a, len: unit.start - a };
+        else selection = null;
+      } else if (unit.start === b + 1 || uEnd === a - 1) {
+        const start = Math.min(a, unit.start);
+        selection = { row, start, len: Math.max(b, uEnd) - start + 1 };
+      } else {
+        selection = unit; // not adjacent: start a new selection
+      }
+    }
+    drawSelection();
+  }
+
+  function drawSelection() {
+    for (const t of tileEls.values()) t.classList.remove('selected');
+    if (!selection) return;
+    board.cells[selection.row].slice(selection.start, selection.start + selection.len)
+      .forEach((cell) => tileEls.get(cell)?.classList.add('selected'));
+  }
+
+  function setControlMode(mode) {
+    controlMode = mode === 'drop' ? 'drop' : 'shift';
+    root.classList.toggle('mode-drop', controlMode === 'drop');
+    selection = null;
+    if (board) drawSelection();
+  }
 
   function drawHoverCell() {
     hoverEl.hidden = !hoverCell || root.classList.contains('locked');
@@ -157,6 +337,8 @@ export function createBoardView(host, { onMove }) {
       t.style.top = `${r * metrics.stepY + ROW_GAP / 2}px`;
       t.classList.toggle('locked', !!cell.chain);
       t.classList.toggle('sideways', !!cell.sideways);
+      t.classList.remove('dragging');
+      t.style.transform = '';
     }));
     for (const [cell, t] of tileEls) {
       if (!live.has(cell)) { t.remove(); tileEls.delete(cell); }
@@ -197,7 +379,7 @@ export function createBoardView(host, { onMove }) {
       const dy = b.top - a.top;
       if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) deltas.push({ t, dx, dy });
     }
-    if (move) {
+    if (move && move.type !== 'drop') {
       const horizontal = move.type === 'row';
       const sign = move.dir === 'left' || move.dir === 'up' ? 1 : -1;
       const key = horizontal ? 'dx' : 'dy';
@@ -256,12 +438,14 @@ export function createBoardView(host, { onMove }) {
     for (const t of tileEls.values()) t.getAnimations().forEach((a) => a.cancel());
 
     board = next;
+    selection = null;
     if (board.cells.length !== builtRows) build(board.cells.length);
     applyMetrics();
     placeTiles();
     updateArrows();
     drawHighlight();
     drawHoverCell();
+    drawSelection();
     if (animate) animateFrom(before, move);
   }
 
@@ -270,6 +454,19 @@ export function createBoardView(host, { onMove }) {
     boxes.forEach((b) => b.remove());
     boxes = [];
     if (!hints) return;
+    // Red boxes: tiles the row's winning tile would complete, drawn slightly inset so they
+    // stay visible inside a group box.
+    evals.forEach((e, r) => e.waits.forEach((g) => {
+      const b = el('div', 'box box-win', tiles);
+      Object.assign(b.style, {
+        left: `${g.col * metrics.stepX + 4}px`,
+        top: `${r * metrics.stepY + ROW_GAP / 2 + 4}px`,
+        width: `${g.len * metrics.stepX - 8}px`,
+        height: `${metrics.stepX - 8}px`,
+        animationDelay: `${UI.animationMs}ms`,
+      });
+      boxes.push(b);
+    }));
     evals.forEach((e, r) => e.groups.forEach((g) => {
       const b = el('div', `box box-${g.type}${g.wait ? ' box-wait' : ''}`, tiles);
       Object.assign(b.style, {
@@ -315,12 +512,6 @@ export function createBoardView(host, { onMove }) {
     });
     [...winCol.children].forEach((t, r) => t.classList.toggle('solved', evals[r].status === 'solved'));
 
-    // Red highlight on tiles the winning tile would complete into a group.
-    for (const t of tileEls.values()) t.classList.remove('wait');
-    if (!hints) return;
-    evals.forEach((e, r) => e.waitCols.forEach((c) => {
-      tileEls.get(board.cells[r][c])?.classList.add('wait');
-    }));
   }
 
   function setLocked(locked) {
@@ -342,6 +533,7 @@ export function createBoardView(host, { onMove }) {
     setBoard,
     setRowStatus,
     setLocked,
+    setControlMode,
     getHover: () => (root.classList.contains('locked') ? null : hoverCell),
   };
 }

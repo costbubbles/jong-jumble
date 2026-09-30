@@ -10,6 +10,7 @@ import { createBoardView } from './ui/render.js';
 import { createHud } from './ui/hud.js';
 
 const HINTS_KEY = 'mahjong-rows.hints';
+const CONTROLS_KEY = 'mahjong-rows.controls';
 
 const state = {
   seed: '',
@@ -23,7 +24,16 @@ const state = {
   solvedSeconds: null,
   evals: [],
   hints: loadHints(),
+  controlMode: loadSetting(CONTROLS_KEY, UI.controlModeDefault),
 };
+
+function loadSetting(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+
+function saveSetting(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* storage unavailable */ }
+}
 
 function loadHints() {
   try {
@@ -81,14 +91,16 @@ function isSolved() {
   return state.solvedSeconds !== null;
 }
 
+/** Applies a move if legal. Returns true when the board changed. */
 function doMove(move) {
-  if (isSolved()) return;
+  if (isSolved()) return false;
   const next = applyMove(state.board, move);
-  if (!next) return;
+  if (!next) return false;
   state.history.push({ board: state.board, move });
   state.board = next;
   countMove();
   update({ move, animate: true });
+  return true;
 }
 
 function undo() {
@@ -152,6 +164,11 @@ const hud = createHud({
   onUndo: undo,
   onRestart: restart,
   onNew: () => (state.typed ? restart() : newPuzzle()),
+  onControlMode: (mode) => {
+    state.controlMode = mode;
+    saveSetting(CONTROLS_KEY, mode);
+    view.setControlMode(mode);
+  },
   onHints: (on) => {
     state.hints = on;
     saveHints(on);
@@ -159,6 +176,8 @@ const hud = createHud({
   },
 });
 hud.setHints(state.hints);
+hud.setControlMode(state.controlMode);
+view.setControlMode(state.controlMode);
 
 // Keyboard: Ctrl+Z undo; WASD / arrow keys shift the row or column of the tile under the mouse.
 const KEY_MOVES = {
@@ -179,7 +198,7 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const dir = KEY_MOVES[key];
   const hover = view.getHover();
-  if (!dir || !hover) return;
+  if (!dir || !hover || state.controlMode !== 'shift') return;
   e.preventDefault();
   doMove(dir === 'up' || dir === 'down'
     ? { type: 'col', col: hover.col, dir }

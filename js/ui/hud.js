@@ -12,7 +12,7 @@ export function formatTime(seconds) {
 
 /**
  * handlers: { onPlay(seedText, difficulty), onDifficulty(difficulty), onUndo(), onRestart(),
- *             onNew(), onHints(bool) }
+ *             onNew(), onHints(bool), onControlMode('shift' | 'drop') }
  */
 export function createHud(handlers) {
   const difficulty = $('difficulty');
@@ -32,6 +32,7 @@ export function createHud(handlers) {
   $('restart').addEventListener('click', handlers.onRestart);
   $('new').addEventListener('click', handlers.onNew);
   $('hints').addEventListener('change', (e) => handlers.onHints(e.target.checked));
+  $('control-mode').addEventListener('change', (e) => handlers.onControlMode(e.target.value));
 
   const dialog = $('win-dialog');
   $('win-close').addEventListener('click', () => dialog.close());
@@ -64,6 +65,7 @@ export function createHud(handlers) {
       $('undo').disabled = !canUndo || solved;
     },
     setHints(on) { $('hints').checked = on; },
+    setControlMode(mode) { $('control-mode').value = mode; },
     /** rows: evaluateRow results for the solved board. */
     showWin({ score, moves, seconds, seed, link, rows }) {
       $('win-score').textContent = score.toLocaleString();

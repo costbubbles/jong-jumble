@@ -105,6 +105,11 @@ export function rowHand(board, r) {
 // Moves
 //   { type: 'row', row, dir: 'left' | 'right' }
 //   { type: 'col', col, dir: 'up' | 'down' }
+//   { type: 'drop', from: { row, start, len }, to: { row, col } }   (drag & drop control mode)
+//     Same row: reorder. The segment is lifted out, the rest closes the gap, and the segment is
+//     re-inserted so it starts at column to.col.
+//     Other row: swap. The segment trades places with the `len` tiles starting at to.col.
+//     Illegal if it would split any chain.
 // ---------------------------------------------------------------------------
 
 /** A row as a list of units: loose tiles are 1-cell units, chains are 3-cell units. */
@@ -151,6 +156,67 @@ export function columnMoveSet(board, col) {
   return set;
 }
 
+/** Every chain in `row` must occupy exactly CHAIN_LEN adjacent cells. */
+function chainsIntact(row) {
+  const seen = new Map();
+  row.forEach((cell, c) => {
+    if (!cell.chain) return;
+    const s = seen.get(cell.chain);
+    if (!s) seen.set(cell.chain, { first: c, last: c, n: 1 });
+    else { s.last = c; s.n++; }
+  });
+  return [...seen.values()].every((s) => s.n === CHAIN_LEN && s.last - s.first === CHAIN_LEN - 1);
+}
+
+/**
+ * Grow a selection { row, start, len } so it covers any chain it touches.
+ * Returns null if the result would be wider than the row.
+ */
+export function expandSelection(board, { row, start, len }) {
+  let a = start;
+  let b = start + len - 1;
+  const cellsRow = board.cells[row];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of [a, b]) {
+      const s = chainStartAt(board, row, c);
+      if (s === null) continue;
+      if (s < a) { a = s; changed = true; }
+      if (s + CHAIN_LEN - 1 > b) { b = s + CHAIN_LEN - 1; changed = true; }
+    }
+  }
+  if (a < 0 || b >= cellsRow.length) return null;
+  return { row, start: a, len: b - a + 1 };
+}
+
+function applyDrop(board, { from, to }) {
+  const R = board.cells.length;
+  const valid = (n, max) => Number.isInteger(n) && n >= 0 && n < max;
+  if (!from || !to || !valid(from.row, R) || !valid(to.row, R) || !Number.isInteger(from.len)
+      || from.len < 1 || !valid(from.start, board.cols) || from.start + from.len > board.cols
+      || !valid(to.col, board.cols) || to.col + from.len > board.cols) return null;
+
+  const cells = board.cells.map((row) => row.slice());
+  const src = board.cells[from.row];
+  const segment = src.slice(from.start, from.start + from.len);
+
+  if (from.row === to.row) {
+    if (from.start === to.col) return null;
+    const rest = [...src.slice(0, from.start), ...src.slice(from.start + from.len)];
+    rest.splice(to.col, 0, ...segment);
+    cells[from.row] = rest;
+  } else {
+    const dst = board.cells[to.row];
+    const other = dst.slice(to.col, to.col + from.len);
+    cells[from.row].splice(from.start, from.len, ...other);
+    cells[to.row].splice(to.col, from.len, ...segment);
+  }
+  // Any chain cut by the segment (in either row) ends up split or short, which this rejects.
+  if (!chainsIntact(cells[from.row]) || !chainsIntact(cells[to.row])) return null;
+  return { ...board, cells };
+}
+
 function isMoveInRange(board, move) {
   if (move.type === 'row') {
     return Number.isInteger(move.row) && move.row >= 0 && move.row < board.cells.length
@@ -165,7 +231,9 @@ function isMoveInRange(board, move) {
 
 /** New board after `move`, or null if the move is illegal. */
 export function applyMove(board, move) {
-  if (!move || !isMoveInRange(board, move)) return null;
+  if (!move) return null;
+  if (move.type === 'drop') return applyDrop(board, move);
+  if (!isMoveInRange(board, move)) return null;
   const cells = board.cells.map((row) => row.slice());
 
   if (move.type === 'row') {
@@ -185,9 +253,20 @@ export function applyMove(board, move) {
 export const canMove = (board, move) => applyMove(board, move) !== null;
 
 const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
-export const inverseMove = (move) => ({ ...move, dir: OPPOSITE[move.dir] });
+export function inverseMove(move) {
+  if (move.type !== 'drop') return { ...move, dir: OPPOSITE[move.dir] };
+  const { from, to } = move;
+  return {
+    type: 'drop',
+    from: { row: to.row, start: to.col, len: from.len },
+    to: { row: from.row, col: from.start },
+  };
+}
 
-export const moveKey = (m) => (m.type === 'row' ? `r${m.row}${m.dir[0]}` : `c${m.col}${m.dir[0]}`);
+export function moveKey(m) {
+  if (m.type === 'drop') return `d${m.from.row}.${m.from.start}.${m.from.len}>${m.to.row}.${m.to.col}`;
+  return m.type === 'row' ? `r${m.row}${m.dir[0]}` : `c${m.col}${m.dir[0]}`;
+}
 
 /** Every move for this board size, legal or not. */
 export function allMoves(board) {

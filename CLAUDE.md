@@ -16,7 +16,7 @@ This file is the design spec and the build plan. Keep it up to date when decisio
 | Columns | **13-column playfield + 1 fixed winning tile per row** (red outline, its own "Win" column). The winning tile never moves: row and column shifts only touch the playfield. It completes the row's one incomplete group, wherever that group is (§4.4). |
 | Hand validity | Winning shape **in a valid left-to-right order** (§4.4) **and at least 1 yaku**. |
 | Yaku context | Fully closed rows count as **riichi** (so they always have a yaku). Rows with an open set need a real yaku. Each row has its own **seat wind**; the **round wind** is shared by the puzzle. The win is always treated as **tsumo**. |
-| Open sets | **Pon + chii only** (3-tile chains, no kans). Chains can never be split. Drawn "locked": greyer and smaller, with one random tile turned sideways (`cell.sideways`, chosen by the seeded generator). |
+| Open sets | **Pon + chii only** (3-tile chains, no kans). Chains can never be split. Drawn "locked": greyer and smaller, with one random tile turned sideways (clockwise) (`cell.sideways`, chosen by the seeded generator). |
 | Row wrap | A chain wraps **as one unit** (see §3.2). |
 | Chain clash on vertical move | **Blocked**: the arrow is disabled (see §3.3). |
 | Tile limits | **Per row, at generation time only**: at most 4 copies of a tile (red 5 counts as 5) and at most one red five per suit. The grid as a whole may exceed a real set. Rows mix during play, so the validity checks don't enforce these limits. |
@@ -25,7 +25,7 @@ This file is the design spec and the build plan. Keep it up to date when decisio
 | QoL | Move counter, timer, undo, per-row validity glow, **per-row shanten counter** (+ "no yaku" flag), **Restart** and **New/Reset** buttons, colored group boxes, hover + WASD/arrow-key controls (§6). |
 | Config | **Every tunable default lives in `js/config.js`**: the scoring formula, difficulty presets, generation weights, UI, and multiplayer defaults. Don't hard-code tunables elsewhere. |
 | Scoring | One formula for SP and MP, defined in `js/config.js` → `SCORING` (§6.1). |
-| Multiplayer match | **Best of N rounds.** All N rounds are always played; scores stay hidden until the end. Each round has a host-set time limit; an unsolved round scores 0. The host toggles hints. |
+| Multiplayer match | **Best of N rounds.** All N rounds are always played; scores stay hidden until the end. Each round has a host-set time limit; an unsolved round scores 0. The host toggles hints and picks the control mode (shift or drag & drop) for both players. |
 | Art | User-supplied **32×32 pixel-art PNGs** in `sprites/` (§2). There is **no tile back**. |
 | Stack | **Vanilla JS, ES modules, no build step.** DOM/CSS rendering. Pure logic modules are shared with the server. |
 | Multiplayer backend | **Small Node.js + `ws` WebSocket server**, which also serves the static files. |
@@ -87,6 +87,10 @@ by reversing them.
 ### 3.1 Move types
 - `{ type: 'row', row, dir: 'left'|'right' }`
 - `{ type: 'col', col, dir: 'up'|'down' }`
+- `{ type: 'drop', from: { row, start, len }, to: { row, col } }` (drag & drop mode only; never used by the
+  scramble). Same row: reorder (segment lifted out, gap closes, re-inserted starting at `to.col`). Other row:
+  swap with the `len` tiles at `to.col`. Illegal if any chain ends up split. `expandSelection` grows a selection
+  to cover whole chains. `inverseMove` works for drops too.
 
 ### 3.2 Row rotation (wrap chains as a unit)
 Treat the row as a circular list of **units**: each loose tile is a unit, and each chain is one
@@ -201,11 +205,21 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
   above/below each playfield column only.
 - Open sets ("locked"): greyer and smaller (`--locked-scale` in CSS), one tile rotated sideways.
 - **Group boxes** (hints on): pair yellow, triplet green, sequence blue; dashed = the wait group.
-- **Wait highlight** (hints on): playfield tiles the row's winning tile would complete into a group are tinted
-  red (`findWaitCols`: a lone copy, an adjacent pair of it, or two adjacent ascending tiles it turns into a
-  sequence). A solved row highlights only its actual wait group.
+- **Wait boxes** (hints on): a red box around each partial group the row's winning tile would complete
+  (`findWaitGroups` → `evaluateRow().waits`: an adjacent pair of it, a lone copy, or two adjacent ascending
+  tiles it turns into a sequence). Drawn slightly inset so they show inside the colored group boxes. A solved
+  row shows only its actual wait group.
 - Hovering an arrow highlights what will move. Blocked column arrows are grey and show the blocked columns.
 - **Keyboard:** hover a tile, then W/Up S/Down move its column, A/Left D/Right move its row. Ctrl+Z = undo.
+- **Control modes** (HUD "Controls" select, saved in localStorage, default `UI.controlModeDefault`; in MP the
+  host picks one mode for both players):
+  - `shift`: arrows, keyboard, or **drag a tile**. The first direction dragged locks the axis, and each full tile
+    dragged applies one row/column shift live (each counts as a move).
+  - `drop`: arrows and keys disabled. Click tiles to build an adjacent selection in one row (clicking an open
+    set selects all 3; clicking an end tile of the selection removes it; a non-adjacent click starts over).
+    Drag the selection: onto another row = **swap** with the tiles there; within its row = **reorder** (the gap
+    closes). Target preview is green if legal, grey if it would split an open set (then it snaps back).
+    Each drop = 1 move: `{ type: 'drop', from: { row, start, len }, to: { row, col } }` (see §3.1).
 - Beside each row: seat wind badge, then Tenpai / n-shanten / "Tiles OK, reorder" / "No yaku" / ✓ points
   (yaku, han and fu on hover). The round wind is shown in the header.
 - **HUD:** seed field + difficulty selector, move counter, timer (starts on the first move), Undo.
@@ -236,7 +250,7 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 
 - `server/server.js`: Node + `ws`. It serves the static files and manages **rooms**.
 - **Host settings:** difficulty, match seed (empty = random), **rounds N**, **round time limit**,
-  **hints on/off** (applies to both players).
+  **hints on/off**, **control mode** (shift / drag & drop) — all apply to both players.
 - **Flow:** the host creates a room → gets a room code → shares it → the opponent joins → the host configures
   the match → both are ready → for each round r = 1..N the server sends `roundStart { round, seed, startAt }`, where
   the round seed is derived from the match seed + r. Both players get the same puzzle, with a countdown before it starts.
@@ -285,7 +299,7 @@ package.json                 # "ws" dependency, scripts: start, test
 ## 9. Build phases
 
 1. ✅ **Core logic + tests:** tiles, rng, board moves, hand decomposition, shanten, yaku, generator,
-   scoring, config, hand points, wait highlight. 29 tests, including the reference-image hands, the ordering rules, hand
+   scoring, config, hand points, wait boxes, drag & drop moves. 32 tests, including the reference-image hands, the ordering rules, hand
    values, and a 2000-move inverse random walk.
 2. ✅ **Rendering + controls:** `js/ui/render.js` (DOM tiles with absolute positions, FLIP slide animation,
    wrapped tiles slide in from the edge, hover highlights, blocked arrows).

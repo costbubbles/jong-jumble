@@ -130,6 +130,7 @@ main { padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
 .box-pon { border-color: var(--box-pon); }
 .box-chi { border-color: var(--box-chi); }
 .box-wait { border-style: dashed; }
+.box-win { border-color: var(--agari); z-index: 5; }   /* tiles the winning tile completes */
 @keyframes box-in { from { opacity: 0; } }
 
 .hover-cell {
@@ -191,16 +192,6 @@ main { padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
 .win-tile img, .win-tile .fallback { outline: 3px solid var(--agari); outline-offset: -3px; }
 .win-tile.solved img, .win-tile.solved .fallback { outline-color: var(--solved); }
 
-/* Tiles the row's winning tile would complete into a group (hints on). */
-.tile.wait::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 4px;
-  background: rgba(230, 57, 70, 0.22);
-  box-shadow: inset 0 0 0 2px var(--agari);
-  pointer-events: none;
-}
 
 /* Locked = open set (chain): greyer and smaller, one tile turned sideways like a called meld. */
 .tile.locked img, .tile.locked .fallback {
@@ -208,8 +199,32 @@ main { padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
   filter: grayscale(0.55) brightness(0.78);
 }
 .tile.locked.sideways img, .tile.locked.sideways .fallback {
-  transform: rotate(-90deg) scale(var(--locked-scale));
+  transform: rotate(90deg) scale(var(--locked-scale));
 }
+
+/* Pointer controls */
+.tiles { touch-action: none; cursor: grab; }
+.tile.selected::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 0 3px #fff;
+  pointer-events: none;
+}
+.tile.dragging { z-index: 8; opacity: 0.9; cursor: grabbing; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6)); }
+.drop-target {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  border: 3px dashed var(--solved);
+  border-radius: 6px;
+  background: rgba(61, 220, 132, 0.15);
+}
+.drop-target.invalid { border-color: #8a8399; background: rgba(120, 120, 120, 0.25); }
+.mode-drop .arrow { visibility: hidden; }
+.mode-drop .tiles { cursor: pointer; }
 
 /* arrows */
 .arrows { display: flex; }
