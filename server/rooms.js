@@ -67,7 +67,7 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
     clearTimer(room);
     room.round++;
     const seed = deriveSeed(room.matchSeed, room.round);
-    room.rules = { requireOrder: room.settings.requireOrder };
+    room.rules = { order: room.settings.order };
     room.puzzle = generatePuzzle(seed, room.settings.difficulty, room.rules);
     room.startAt = now() + MULTIPLAYER.countdownSec * 1000;
     room.phase = 'playing';
@@ -85,7 +85,8 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
       timeLimitSec: room.settings.timeLimitSec,
       hints: room.settings.hints,
       controlMode: room.settings.controlMode,
-      requireOrder: room.settings.requireOrder,
+      order: room.settings.order,
+      dropSwap: room.settings.dropSwap,
     });
     room.timer = schedule(() => endRound(room),
       MULTIPLAYER.countdownSec * 1000 + room.settings.timeLimitSec * 1000);
@@ -226,7 +227,11 @@ export function createRoomManager({ now = Date.now, schedule = setTimeout, cance
         const g = client.game;
         if (!room || room.phase !== 'playing' || !g || g.solvedAt !== null) return;
         if (now() < room.startAt || !msg.move || !MOVE_TYPES.has(msg.move.type)) return;
-        const next = applyMove(g.board, msg.move);
+        // Only the host's control mode is allowed, and drops follow the host's same-row swap setting.
+        const isDrop = msg.move.type === 'drop';
+        const next = isDrop === (room.settings.controlMode === 'drop')
+          ? applyMove(g.board, isDrop ? { ...msg.move, swap: room.settings.dropSwap } : msg.move)
+          : null;
         if (!next) {
           send({ type: 'sync', board: g.board, moves: g.moves });
           return;

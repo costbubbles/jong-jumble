@@ -120,11 +120,25 @@ test('incomplete hands report shanten', () => {
 });
 
 // ---------------------------------------------------------------------------
-// "Any order" rule: { requireOrder: false }
+// Ordering rules: { order: 'strict' | 'reverse' | 'any' }
 // ---------------------------------------------------------------------------
 
 const rowAny = (notation, seatWind = '1z', roundWind = '1z') =>
-  evaluateRow(createBoard({ rows: [notation], roundWind, seatWinds: [seatWind] }), 0, { requireOrder: false });
+  evaluateRow(createBoard({ rows: [notation], roundWind, seatWinds: [seatWind] }), 0, { order: 'any' });
+const rowRev = (notation, seatWind = '1z', roundWind = '1z') =>
+  evaluateRow(createBoard({ rows: [notation], roundWind, seatWinds: [seatWind] }), 0, { order: 'reverse' });
+
+test('reverse rule: descending sequences and waits count, jumbled ones do not', () => {
+  assert.equal(row('321s 05s 78p 321m 444m 9p').status, 'reorder');
+  const rev = rowRev('321s 05s 78p 321m 444m 9p');
+  assert.equal(rev.status, 'solved');
+  assert.equal(rev.points, row('123s 05s 78p 123m 444m 9p').points);
+  assert.equal(rowRev('123s 05s 87p 123m 444m 9p').status, 'solved');   // descending wait 8-7 + 9
+  assert.equal(rowRev('123s 05s 97p 123m 444m 8p').status, 'solved');   // descending kanchan 9_7
+  assert.equal(rowRev('213s 05s 78p 123m 444m 9p').status, 'reorder');  // 2-1-3 is neither
+  // The descending 8-7 wait is the group the winning 9p completes (boxed at cols 5-6)
+  assert.ok(rowRev('123s 55p 87p 123m 444m 9p').groups.some((g) => g.col === 5 && g.len === 2 && g.wait));
+});
 
 test('any-order rule: a shuffled winning row wins with the same value', () => {
   const sorted = row('123s 05s 78p 123m 444m 9p');

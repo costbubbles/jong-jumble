@@ -115,3 +115,12 @@ test('drops that would split a chain are refused', () => {
   assert.deepEqual(expandSelection(b, { row: 0, start: 3, len: 1 }), { row: 0, start: 2, len: 3 });
   assert.deepEqual(expandSelection(b, { row: 0, start: 1, len: 2 }), { row: 0, start: 1, len: 4 });
 });
+
+test('same-row drop with swap trades places instead of pushing aside', () => {
+  const b = createBoard({ rows: ['123456789m1234p 5p'] });
+  const move = { ...drop(0, 0, 2, 0, 5), swap: true };
+  const next = applyMove(b, move);
+  assert.equal(tilesOf(next, 0), '6m 7m 3m 4m 5m 1m 2m 8m 9m 1p 2p 3p 4p');
+  assert.ok(boardsEqual(applyMove(next, inverseMove(move)), b));
+  assert.equal(applyMove(b, { ...drop(0, 0, 2, 0, 1), swap: true }), null); // overlapping ranges
+});

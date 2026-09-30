@@ -14,7 +14,7 @@ This file is the design spec and the build plan. Keep it up to date when decisio
 | Topic | Decision |
 |---|---|
 | Columns | **13-column playfield + 1 fixed winning tile per row** (red outline, its own "Win" column). The winning tile never moves: row and column shifts only touch the playfield. It completes the row's one incomplete group, wherever that group is (§4.4). |
-| Hand validity | Winning shape **in a valid left-to-right order** (§4.4) **and at least 1 yaku**. A **Tile order** setting (solo setup, 1v1 host) can switch to **Any order**: then the right tiles in any arrangement win (§4.5). |
+| Hand validity | Winning shape **in a valid left-to-right order** (§4.4) **and at least 1 yaku**. A **Tile order** setting (solo setup, 1v1 host): Strict / Reverse OK / Any order (§4.5). |
 | Yaku context | Fully closed rows count as **riichi** (so they always have a yaku). Rows with an open set need a real yaku. Each row has its own **seat wind**; the **round wind** is shared by the puzzle. The win is always treated as **tsumo**. |
 | Open sets | **Pon + chii only** (3-tile chains, no kans). Chains can never be split. Drawn "locked": greyer and smaller, with one random tile turned sideways (clockwise) (`cell.sideways`, chosen by the seeded generator). |
 | Row wrap | A chain wraps **as one unit** (see §3.2). |
@@ -175,16 +175,17 @@ Take the minimum over regular / chiitoi / kokushi (the last two only when k = 0)
 - `groups` (for the colored boxes): the winning parse for a complete row (the wait group is marked
   `wait`, drawn dashed), otherwise the best non-overlapping contiguous sets/pairs per run (`findGroups`).
 
-### 4.5 "Any order" rule (`rules = { requireOrder: false }`)
-- `evaluateRow(board, r, rules)` / `evaluateBoard(board, rules)` / `generatePuzzle(seed, difficulty, rules)`;
-  default `{ requireOrder: true }`. Settings: `UI.requireOrderDefault`, `MULTIPLAYER.requireOrder`; solo remembers
-  it (localStorage `jong-jumble.order`), share links carry `&order=any`, 1v1 sends it in `roundStart`.
-- A row wins when its loose tiles + winning tile form 4 sets + pair (or seven pairs / kokushi) in any
-  arrangement, with a yaku. Open sets still count as open melds and must stay whole.
-- Scoring is identical: `unorderedParses` tries every group the winning tile could have completed and derives
-  the wait (tanki / shanpon / ryanmen / penchan / kanchan) for fu and pinfu; the best-scoring reading wins.
-- Group boxes and red wait boxes still show the positional `findGroups` / `findWaitGroups` hints; `reorder`
-  status can't happen.
+### 4.5 Ordering rule (`rules = { order }`)
+- `order`: **'strict'** (default: left to right, sequences ascending), **'reverse'** (left to right, each
+  sequence and partial sequence may be ascending or descending: 4-5-6 or 6-5-4, never 5-4-6), **'any'**
+  (the right tiles in any arrangement). Labels live in `ORDER_RULES` (config).
+- `evaluateRow(board, r, rules)` / `evaluateBoard(board, rules)` / `generatePuzzle(seed, difficulty, rules)`.
+  Defaults: `UI.orderDefault`, `MULTIPLAYER.order`. Solo remembers it (localStorage `jong-jumble.order`),
+  share links carry `&order=reverse|any`, 1v1 sends it in `roundStart`.
+- 'any': a row wins when its loose tiles + winning tile form 4 sets + pair (or seven pairs / kokushi), with a
+  yaku. Open sets still count and stay whole. `unorderedParses` tries every group the winning tile could have
+  completed and derives the wait for fu and pinfu, so scoring matches a sorted win. `reorder` can't happen.
+- Hint boxes accept descending sequences whenever the rule isn't 'strict'.
 - The generator passes the rule to the scramble, so a puzzle never starts with a row already solved under it.
 
 ---
@@ -244,7 +245,9 @@ straight to the board. Last difficulty, controls and hints are remembered (local
   - `drop`: arrows and keys disabled. Click tiles to build an adjacent selection in one row (clicking an open
     set selects all 3; clicking an end tile of the selection removes it; a non-adjacent click starts over).
     Drag the selection: onto another row = **swap** with the tiles there; within its row = **reorder** (the gap
-    closes). Target preview is green if legal, grey if it would split an open set (then it snaps back).
+    closes), or with the **Same-row drops: swap** option (`dropSwap`) trade places with the tiles there
+    (overlapping ranges are refused). Target preview is green if legal, grey if it would split an open set
+    (then it snaps back).
     Each drop = 1 move: `{ type: 'drop', from: { row, start, len }, to: { row, col } }` (see §3.1).
 - Beside each row: seat wind badge, then Tenpai / n-shanten / "Tiles OK, reorder" / "No yaku" / ✓ points
   (yaku, han and fu on hover).
@@ -286,13 +289,15 @@ score = ( Σ over rows of handPoints ) / max(1, seconds − 30)
 - **Protocol:** `js/net/protocol.js` documents every message and holds `sanitizeSettings` / `sanitizeName`,
   shared by client and server.
 - **Room flow:** host `create`s → 5-char code (no 0/O/1/I) → guest `join`s (case-insensitive) → host
-  `configure`s (difficulty, rounds 1/3/5/7/9, time per round 1-10 min, controls, tile order, hints, seed; any change
+  `configure`s (difficulty, rounds 1/3/5/7/9, time per round 1-10 min, controls, same-row swap, tile order,
+  hints, seed; any change
   un-readies both) → both `ready` → match.
 - **Rounds:** round seed = `deriveSeed(matchSeed, r)`; matchSeed = host's seed or random. Server sends
   `roundStart` with `startAt` + `serverNow` (clients convert to their own clock), a 3 s countdown
   (`MULTIPLAYER.countdownSec`), then the time limit. Moves before `startAt` are ignored.
 - **Authoritative replay:** the client applies moves locally and sends them; the server applies the same move
-  to its copy (`applyMove`). An illegal move gets `sync { board, moves }` back. Undo = `undo` (counts as a
+  to its copy (`applyMove`), only accepting moves of the host's control mode and forcing drops to the host's
+  `dropSwap` setting. An illegal move gets `sync { board, moves }` back. Undo = `undo` (counts as a
   move). The server detects the solve itself.
 - **Hidden scores:** during the match clients only see `progress { player, moves, solved }`. A round ends when
   both solved or time runs out (unsolved = 0). After `roundBreakSec` the next round starts; after the last one
@@ -344,7 +349,7 @@ package.json                 # "ws" dependency, scripts: start, test
 ## 9. Build phases
 
 1. ✅ **Core logic + tests:** tiles, rng, board moves, hand decomposition, shanten, yaku, generator,
-   scoring, config, hand points, wait boxes, drag & drop moves, any-order rule. 41 tests, including the reference-image hands, the ordering rules, hand
+   scoring, config, hand points, wait boxes, drag & drop moves, ordering rules, same-row swap, server move enforcement. 44 tests, including the reference-image hands, the ordering rules, hand
    values, and a 2000-move inverse random walk.
 2. ✅ **Rendering + controls:** `js/ui/render.js` (DOM tiles with absolute positions, FLIP slide animation,
    wrapped tiles slide in from the edge, hover highlights, blocked arrows).

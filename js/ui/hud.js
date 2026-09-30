@@ -1,7 +1,7 @@
 // HUD: binds the static controls in index.html: top bar (stats, Undo/Restart/New, Menu, How to play),
 // the Solo setup dialog, the help dialog and the win dialog.
 
-import { DIFFICULTIES } from '../config.js';
+import { DIFFICULTIES, ORDER_RULES } from '../config.js';
 import { TILE_NAMES } from '../core/tiles.js';
 
 const $ = (id) => document.getElementById(id);
@@ -18,8 +18,8 @@ const CONTROL_NOTES = {
 
 /**
  * handlers: {
- *   onPlay({ seed, difficulty, requireOrder }), onResume(), onTitle(), onMenu(),
- *   onUndo(), onRestart(), onNew(), onHints(bool), onControlMode('shift' | 'drop'),
+ *   onPlay({ seed, difficulty, order }), onResume(), onTitle(), onMenu(),
+ *   onUndo(), onRestart(), onNew(), onHints(bool), onControlMode('shift' | 'drop'), onDropSwap(bool),
  * }
  */
 export function createHud(handlers) {
@@ -30,6 +30,12 @@ export function createHud(handlers) {
     const label = document.createElement('label');
     label.innerHTML = `<input type="radio" name="difficulty" value="${key}"><span>${d.label}<small>${d.rows} rows</small></span>`;
     difficulty.appendChild(label);
+  }
+  const order = $('order');
+  for (const [key, r] of Object.entries(ORDER_RULES)) {
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="radio" name="order" value="${key}"><span>${r.label}<small>${r.note}</small></span>`;
+    order.appendChild(label);
   }
   const radioValue = (name) => setup.querySelector(`input[name="${name}"]:checked`)?.value;
   const setRadio = (name, value) => {
@@ -43,7 +49,7 @@ export function createHud(handlers) {
     handlers.onPlay({
       seed: $('seed-input').value.trim(),
       difficulty: radioValue('difficulty'),
-      requireOrder: radioValue('order') !== 'any',
+      order: radioValue('order'),
     });
   });
   $('setup-resume').addEventListener('click', () => { setup.close(); handlers.onResume(); });
@@ -57,8 +63,10 @@ export function createHud(handlers) {
   });
   setup.querySelectorAll('input[name="control-mode"]').forEach((input) => input.addEventListener('change', () => {
     $('control-note').textContent = CONTROL_NOTES[input.value];
+    $('drop-swap-field').hidden = input.value !== 'drop';
     handlers.onControlMode(input.value);
   }));
+  $('drop-swap').addEventListener('change', (e) => handlers.onDropSwap(e.target.checked));
   $('hints').addEventListener('change', (e) => handlers.onHints(e.target.checked));
 
   // ------------------------------------------------------------------ top bar
@@ -92,10 +100,12 @@ export function createHud(handlers) {
       if (!setup.open) setup.showModal();
       $('setup-play').focus();
     },
-    setSetupValues({ seed, typed, difficulty: diff, controlMode, hints, requireOrder }) {
+    setSetupValues({ seed, typed, difficulty: diff, controlMode, hints, order: orderRule, dropSwap }) {
       $('seed-input').value = typed ? seed : '';
       setRadio('difficulty', diff);
-      setRadio('order', requireOrder ? 'sorted' : 'any');
+      setRadio('order', orderRule);
+      $('drop-swap').checked = dropSwap;
+      $('drop-swap-field').hidden = controlMode !== 'drop';
       setRadio('control-mode', controlMode);
       $('control-note').textContent = CONTROL_NOTES[controlMode] ?? '';
       $('hints').checked = hints;

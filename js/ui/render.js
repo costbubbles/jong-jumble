@@ -5,6 +5,7 @@
 //   view.setRowStatus(evals, { hints });
 //   view.setLocked(true|false);
 //   view.setControlMode('shift' | 'drop');
+//   view.setDropSwap(bool);                     // drop mode: same-row drops swap instead of reorder
 //   view.getHover();                            // { row, col } under the mouse, or null
 //
 // onMove(move) must return true if the move was applied (the view then receives setBoard).
@@ -65,6 +66,7 @@ export function createBoardView(host, { onMove }) {
   const dropEl = el('div', 'drop-target');
   dropEl.hidden = true;
   let controlMode = 'shift';
+  let dropSwap = false;
   let selection = null;    // drop mode: { row, start, len }
   let drag = null;         // active pointer gesture
 
@@ -174,7 +176,7 @@ export function createBoardView(host, { onMove }) {
     const target = cellAt(e.clientX, e.clientY, true);
     const len = drag.from.len;
     const col = Math.min(board.cols - len, Math.max(0, target.col - drag.grab));
-    const move = { type: 'drop', from: drag.from, to: { row: target.row, col } };
+    const move = { type: 'drop', from: drag.from, to: { row: target.row, col }, ...(dropSwap ? { swap: true } : {}) };
     const same = target.row === drag.from.row && col === drag.from.start;
     drag.move = !same && applyMove(board, move) ? move : null;
 
@@ -544,6 +546,7 @@ export function createBoardView(host, { onMove }) {
     setRowStatus,
     setLocked,
     setControlMode,
+    setDropSwap: (on) => { dropSwap = !!on; },
     getHover: () => (root.classList.contains('locked') ? null : hoverCell),
   };
 }

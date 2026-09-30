@@ -105,9 +105,10 @@ export function rowHand(board, r) {
 // Moves
 //   { type: 'row', row, dir: 'left' | 'right' }
 //   { type: 'col', col, dir: 'up' | 'down' }
-//   { type: 'drop', from: { row, start, len }, to: { row, col } }   (drag & drop control mode)
+//   { type: 'drop', from: { row, start, len }, to: { row, col }, swap? }   (drag & drop control mode)
 //     Same row: reorder. The segment is lifted out, the rest closes the gap, and the segment is
-//     re-inserted so it starts at column to.col.
+//     re-inserted so it starts at column to.col. With swap: true it trades places with the `len`
+//     tiles at to.col instead (illegal if the two ranges overlap).
 //     Other row: swap. The segment trades places with the `len` tiles starting at to.col.
 //     Illegal if it would split any chain.
 // ---------------------------------------------------------------------------
@@ -190,7 +191,8 @@ export function expandSelection(board, { row, start, len }) {
   return { row, start: a, len: b - a + 1 };
 }
 
-function applyDrop(board, { from, to }) {
+function applyDrop(board, move) {
+  const { from, to } = move;
   const R = board.cells.length;
   const valid = (n, max) => Number.isInteger(n) && n >= 0 && n < max;
   if (!from || !to || !valid(from.row, R) || !valid(to.row, R) || !Number.isInteger(from.len)
@@ -201,7 +203,12 @@ function applyDrop(board, { from, to }) {
   const src = board.cells[from.row];
   const segment = src.slice(from.start, from.start + from.len);
 
-  if (from.row === to.row) {
+  if (from.row === to.row && move.swap) {
+    if (Math.abs(from.start - to.col) < from.len) return null; // ranges overlap
+    const other = src.slice(to.col, to.col + from.len);
+    cells[from.row].splice(to.col, from.len, ...segment);
+    cells[from.row].splice(from.start, from.len, ...other);
+  } else if (from.row === to.row) {
     if (from.start === to.col) return null;
     const rest = [...src.slice(0, from.start), ...src.slice(from.start + from.len)];
     rest.splice(to.col, 0, ...segment);
@@ -260,11 +267,12 @@ export function inverseMove(move) {
     type: 'drop',
     from: { row: to.row, start: to.col, len: from.len },
     to: { row: from.row, col: from.start },
+    ...(move.swap ? { swap: true } : {}),
   };
 }
 
 export function moveKey(m) {
-  if (m.type === 'drop') return `d${m.from.row}.${m.from.start}.${m.from.len}>${m.to.row}.${m.to.col}`;
+  if (m.type === 'drop') return `d${m.from.row}.${m.from.start}.${m.from.len}>${m.to.row}.${m.to.col}${m.swap ? 's' : ''}`;
   return m.type === 'row' ? `r${m.row}${m.dir[0]}` : `c${m.col}${m.dir[0]}`;
 }
 

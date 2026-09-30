@@ -1,8 +1,10 @@
 // Yaku detection and per-row evaluation.
 // Rules (see CLAUDE.md §4): closed rows are treated as riichi + menzen tsumo, so any complete
 // closed row has a yaku. Rows with open melds (chains) need a real open-legal yaku. Win is tsumo.
-// By default a row only wins when its tiles are in a valid left-to-right order (evaluateOrdered);
-// with the rule option { requireOrder: false } any arrangement of a winning set of tiles counts.
+// Ordering rule (rules.order):
+//   'strict'  - read left to right, sequences ascending (default)
+//   'reverse' - read left to right, each sequence ascending or descending (4-5-6 or 6-5-4)
+//   'any'     - any arrangement of a winning set of tiles counts
 
 import { counts34, toIndex34, normalize, sortTiles, isRed, TILE_NAMES } from './tiles.js';
 import { decompose, isChiitoi, isKokushi, shanten } from './hand.js';
@@ -166,11 +168,21 @@ function looseRuns(cells) {
   return runs;
 }
 
+/** Wait kinds for two same-suit tiles lo < hi completed by w: [[chiStart, wait]]. */
+function seqWaits(lo, hi, w) {
+  const out = [];
+  if (hi === lo + 1 && w === lo - 1) out.push([w, lo % 9 === 7 ? 'penchan' : 'ryanmen']);
+  if (hi === lo + 1 && w === hi + 1) out.push([lo, lo % 9 === 0 ? 'penchan' : 'ryanmen']);
+  if (hi === lo + 2 && w === lo + 1) out.push([lo, 'kanchan']);
+  return out;
+}
+
 /**
  * All left-to-right parses of the runs into groups with exactly one incomplete group (the wait)
  * completed by the drawn tile `w`. Groups: { type, start, col, len, wait? }.
+ * reverse: sequences (and partial sequences) may also read descending.
  */
-function parseRuns(runs, w) {
+function parseRuns(runs, w, reverse = false) {
   const out = [];
   const acc = [];
   const sameSuit = (...xs) => xs.every((x) => x < 27 && Math.floor(x / 9) === Math.floor(xs[0] / 9));
@@ -192,14 +204,14 @@ function parseRuns(runs, w) {
 
     if (c !== undefined && a === b && b === c) take('pon', a, 3);
     if (c !== undefined && sameSuit(a, b, c) && b === a + 1 && c === a + 2) take('chi', a, 3);
+    if (reverse && c !== undefined && sameSuit(a, b, c) && b === a - 1 && c === a - 2) take('chi', c, 3);
     if (b !== undefined && a === b) take('pair', a, 2);
     if (waitUsed) return;
     if (a === w) take('pair', a, 1, 'tanki');
     if (b !== undefined && a === b && a === w) take('pon', a, 2, 'shanpon');
     if (b !== undefined && sameSuit(a, b, w)) {
-      if (b === a + 1 && w === a - 1) take('chi', w, 2, a % 9 === 7 ? 'penchan' : 'ryanmen');
-      if (b === a + 1 && w === b + 1) take('chi', a, 2, a % 9 === 0 ? 'penchan' : 'ryanmen');
-      if (b === a + 2 && w === a + 1) take('chi', a, 2, 'kanchan');
+      const pairs = b > a ? seqWaits(a, b, w) : reverse ? seqWaits(b, a, w) : [];
+      for (const [start, wait] of pairs) take('chi', start, 2, wait);
     }
   };
   step(0, 0, false);
@@ -210,7 +222,7 @@ function parseRuns(runs, w) {
  * Best-scoring valid groups in a row that isn't won yet (for the colored boxes): per run, the
  * non-overlapping contiguous sets/pairs covering the most tiles (sets preferred on ties).
  */
-export function findGroups(cells) {
+export function findGroups(cells, reverse = false) {
   const groups = [];
   for (const run of looseRuns(cells)) {
     const n = run.length;
@@ -224,7 +236,8 @@ export function findGroups(cells) {
       };
       if (b !== undefined && a === b) consider('pair', 2, 2);
       if (c !== undefined && a === b && b === c) consider('pon', 3, 3.01);
-      if (c !== undefined && a < 27 && Math.floor(a / 9) === Math.floor(c / 9) && b === a + 1 && c === a + 2) {
+      const suited = c !== undefined && a < 27 && Math.floor(a / 9) === Math.floor(c / 9);
+      if (suited && ((b === a + 1 && c === a + 2) || (reverse && b === a - 1 && c === a - 2))) {
         consider('chi', 3, 3.01);
       }
     }
@@ -243,7 +256,7 @@ export function findGroups(cells) {
  * [{ col, len }]: an adjacent pair of w (-> triplet), a lone copy of w (-> pair), or two adjacent
  * ascending tiles that w turns into a sequence (ryanmen / penchan / kanchan). Boxes may overlap.
  */
-export function findWaitGroups(cells, winTile) {
+export function findWaitGroups(cells, winTile, reverse = false) {
   const w = toIndex34(winTile);
   const groups = [];
   for (const run of looseRuns(cells)) {
@@ -259,9 +272,8 @@ export function findWaitGroups(cells, winTile) {
       }
       if (w >= 27 || a >= 27) return;
       const sameSuit = Math.floor(a / 9) === Math.floor(b / 9) && Math.floor(a / 9) === Math.floor(w / 9);
-      if (sameSuit && ((b === a + 1 && (w === a - 1 || w === b + 1)) || (b === a + 2 && w === a + 1))) {
-        groups.push({ col, len: 2 });
-      }
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      if (sameSuit && (a < b || reverse) && seqWaits(lo, hi, w).length) groups.push({ col, len: 2 });
     });
     for (const { idx, col } of run) {
       if (idx === w && !inPair.has(col)) groups.push({ col, len: 1 });
@@ -306,12 +318,12 @@ function unorderedParses(counts, w, setsNeeded) {
 const NO_WIN = { complete: false, hasYaku: false, yaku: [], yakuHan: [], han: 0, fu: 0, points: 0, limit: '', groups: [] };
 
 /**
- * Win check for one row. With requireOrder (default) the playfield `cells`, read left to right (chains
+ * Win check for one row. With order 'strict' / 'reverse' the playfield `cells`, read left to right (chains
  * split runs), must form ordered groups with exactly one wait, which the fixed `winTile` completes.
- * Without it, any arrangement of a winning set of tiles counts.
+ * With 'any', any arrangement of a winning set of tiles counts.
  * Returns the best-scoring win: { complete, hasYaku, yaku, yakuHan, han, fu, points, limit, groups }.
  */
-export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '1z', requireOrder = true } = {}) {
+export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '1z', order = 'strict' } = {}) {
   const meldTiles = new Map();
   for (const cell of cells) {
     if (!cell.chain) continue;
@@ -333,8 +345,8 @@ export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '
   // Each candidate: { names, groups, fu }
   const candidates = [];
   const w = toIndex34(winTile);
-  const parses = requireOrder
-    ? parseRuns(looseRuns(cells), w)
+  const parses = order !== 'any'
+    ? parseRuns(looseRuns(cells), w, order === 'reverse')
     : unorderedParses(counts34([...cells.filter((x) => !x.chain).map((x) => x.tile), winTile]), w, 4 - melds.length);
   for (const groups of parses) {
     const pairs = groups.filter((g) => g.type === 'pair');
@@ -397,8 +409,10 @@ export function evaluateOrdered(cells, winTile, { seatWind = '1z', roundWind = '
  * groups: valid tile groups to box ({ type, col, len, wait? }). For a won row these are the
  *         winning groups; otherwise the best contiguous sets/pairs found.
  */
-export function evaluateRow(board, r, { requireOrder = true } = {}) {
-  const ctx = { seatWind: board.seatWinds[r], roundWind: board.roundWind, requireOrder };
+export function evaluateRow(board, r, { order = 'strict' } = {}) {
+  const ctx = { seatWind: board.seatWinds[r], roundWind: board.roundWind, order };
+  const positional = order !== 'any';
+  const reverse = order !== 'strict'; // hints also accept descending sequences
   const { closed, melds } = rowHand(board, r);
   const loose = evaluateHand({ closed, melds, ...ctx });
   const ordered = evaluateOrdered(board.cells[r], board.winTiles[r], ctx);
@@ -420,15 +434,15 @@ export function evaluateRow(board, r, { requireOrder = true } = {}) {
     points: solved ? ordered.points : 0,
     limit: solved ? ordered.limit : '',
     // Box positions come from the winning parse only when it is positional (ordered rule).
-    groups: requireOrder && ordered.complete ? ordered.groups : findGroups(board.cells[r]),
+    groups: positional && ordered.complete ? ordered.groups : findGroups(board.cells[r], reverse),
     // Boxes around tiles the winning tile would complete: just the wait group once the row wins.
-    waits: requireOrder && ordered.complete
+    waits: positional && ordered.complete
       ? ordered.groups.filter((g) => g.wait).map(({ col, len }) => ({ col, len }))
-      : findWaitGroups(board.cells[r], board.winTiles[r]),
+      : findWaitGroups(board.cells[r], board.winTiles[r], reverse),
   };
 }
 
-/** rules: { requireOrder = true } */
+/** rules: { order = 'strict' | 'reverse' | 'any' } */
 export const evaluateBoard = (board, rules) => board.cells.map((_, r) => evaluateRow(board, r, rules));
 
 export const isBoardSolved = (board, rules) => evaluateBoard(board, rules).every((e) => e.solved);

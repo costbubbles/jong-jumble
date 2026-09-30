@@ -65,16 +65,17 @@ test('create, join, and host-only settings', () => {
 
   guest.send('configure', { settings: { rounds: 5 } });
   assert.match(guest.last('error').message, /host/);
-  host.send('configure', { settings: { rounds: 5, difficulty: 'hard', timeLimitSec: 99999, controlMode: 'drop', requireOrder: false } });
+  host.send('configure', { settings: { rounds: 5, difficulty: 'hard', timeLimitSec: 99999, controlMode: 'drop', order: 'any', dropSwap: true } });
   const s = guest.last('room').settings;
   assert.equal(s.rounds, 5);
   assert.equal(s.difficulty, 'hard');
   assert.equal(s.timeLimitSec, MULTIPLAYER.roundTimeLimitSec); // not an allowed option: unchanged
   assert.equal(s.controlMode, 'drop');
-  assert.equal(s.requireOrder, false);
+  assert.equal(s.order, 'any');
+  assert.equal(s.dropSwap, true);
   host.send('ready', { ready: true });
   guest.send('ready', { ready: true });
-  assert.equal(guest.last('roundStart').requireOrder, false);
+  assert.equal(guest.last('roundStart').order, 'any');
 
   const third = env.player();
   third.send('join', { code: host.last('joined').code, name: 'X' });
@@ -162,4 +163,18 @@ test('leaving mid-match forfeits to the opponent', () => {
   // The room survives for a new opponent; an empty room is deleted.
   host.send('leave');
   assert.equal(env.mgr.rooms.size, 0);
+});
+
+test('server only accepts the host control mode and applies its swap setting', () => {
+  const env = setup();
+  const { host, guest } = lobby(env, { rounds: 1, controlMode: 'drop', dropSwap: true });
+  host.send('ready', { ready: true });
+  guest.send('ready', { ready: true });
+  env.advance(MULTIPLAYER.countdownSec * 1000);
+  host.send('move', { move: { type: 'row', row: 0, dir: 'left' } }); // shift move in a drop match
+  assert.ok(host.last('sync'));
+  assert.equal(guest.last('progress'), undefined);
+  // same-row drop sent without swap: the server applies the host's swap rule anyway
+  host.send('move', { move: { type: 'drop', from: { row: 0, start: 0, len: 1 }, to: { row: 0, col: 1 } } });
+  assert.equal(guest.last('progress').moves, 1);
 });

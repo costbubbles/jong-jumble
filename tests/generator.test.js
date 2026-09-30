@@ -56,9 +56,9 @@ test('solved boards carry hand points', () => {
   for (const e of evaluateBoard(p.solved)) assert.ok(e.points >= 1000, `row worth ${e.points}`);
 });
 
-test('any-order puzzles never start with a row solved under that rule', () => {
+test('relaxed-order puzzles never start with a row solved under that rule', () => {
   for (let i = 0; i < 25; i++) {
-    const p = generatePuzzle(`any-${i}`, 'medium', { requireOrder: false });
+    const p = generatePuzzle(`any-${i}`, 'medium', { order: i % 2 ? 'any' : 'reverse' });
     assert.ok(isBoardSolved(p.solved, p.rules));
     assert.ok(evaluateBoard(p.board, p.rules).every((e) => !e.solved));
   }

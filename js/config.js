@@ -53,6 +53,15 @@ export const GENERATION = {
 };
 
 // ---------------------------------------------------------------------------
+// Winning-hand ordering rules (labels shown in the setup dialog and 1v1 lobby)
+// ---------------------------------------------------------------------------
+export const ORDER_RULES = {
+  strict: { label: 'Strict', note: 'ascending only' },
+  reverse: { label: 'Reverse OK', note: 'up or down' },
+  any: { label: 'Any order', note: 'just the right tiles' },
+};
+
+// ---------------------------------------------------------------------------
 // User interface
 // ---------------------------------------------------------------------------
 export const UI = {
@@ -61,8 +70,8 @@ export const UI = {
   hintsDefault: true,    // row glow, shanten counter, "no yaku" marker, group boxes
   // 'shift' = arrows / drag to rotate rows and columns; 'drop' = select tiles and drag & drop them
   controlModeDefault: 'shift',
-  // true = a row only wins with its tiles in left-to-right order; false = any order of a winning hand
-  requireOrderDefault: true,
+  orderDefault: 'strict',  // winning-hand ordering rule, see ORDER_RULES
+  dropSwapDefault: false,  // drag & drop: same-row drops swap instead of pushing tiles aside
 };
 
 // ---------------------------------------------------------------------------
@@ -85,7 +94,8 @@ export const MULTIPLAYER = {
   timeLimitOptions: [60, 120, 180, 300, 600],
   hints: true,
   controlMode: 'shift',
-  requireOrder: true,
+  order: 'strict',
+  dropSwap: false,
   countdownSec: 3,        // "3, 2, 1" before each round
   roundBreakSec: 4,       // pause between rounds
   // Tie in match totals: 'fewerSeconds' (less total solve time wins), or 'draw'.

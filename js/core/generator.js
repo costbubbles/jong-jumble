@@ -159,11 +159,11 @@ export function scrambleBoard(rng, board, count, rules) {
 }
 
 /**
- * Deterministic puzzle for (seed, difficulty, rules). rules = { requireOrder } (see yaku.js); the
+ * Deterministic puzzle for (seed, difficulty, rules). rules = { order } (see yaku.js); the
  * scramble keeps going until no row is already solved under those rules.
  * Returns { seed, difficulty, solved, board, scramble, startShanten }.
  */
-export function generatePuzzle(seed, difficulty, rules = { requireOrder: true }) {
+export function generatePuzzle(seed, difficulty, rules = { order: 'strict' }) {
   if (!DIFFICULTIES[difficulty]) throw new Error(`Unknown difficulty "${difficulty}"`);
   const rng = createRng(`${seed}|${difficulty}`);
   const solved = generateSolvedBoard(rng, difficulty);

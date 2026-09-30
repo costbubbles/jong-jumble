@@ -5,7 +5,7 @@
 // Shared links (?seed=…&d=…) skip straight to the board.
 // 1v1 (js/net/versus.js) reuses this board: rounds come from the server, moves are mirrored to it.
 
-import { DIFFICULTIES, DEFAULT_DIFFICULTY, GENERATION, UI } from './config.js';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY, GENERATION, UI, ORDER_RULES } from './config.js';
 import { generatePuzzle } from './core/generator.js';
 import { applyMove, inverseMove } from './core/board.js';
 import { evaluateBoard } from './core/yaku.js';
@@ -21,7 +21,14 @@ const KEYS = {
   controls: 'jong-jumble.controls',
   difficulty: 'jong-jumble.difficulty',
   order: 'jong-jumble.order',
+  dropSwap: 'jong-jumble.dropswap',
 };
+
+/** Accepts older stored values ('sorted') and anything unknown → a valid ORDER_RULES key. */
+function normalizeOrder(value) {
+  if (value === 'sorted') return 'strict';
+  return Object.hasOwn(ORDER_RULES, value ?? '') ? value : UI.orderDefault;
+}
 
 function loadSetting(key, fallback) {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
@@ -45,7 +52,8 @@ const state = {
   evals: [],
   hints: loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1',
   controlMode: loadSetting(KEYS.controls, UI.controlModeDefault),
-  requireOrder: loadSetting(KEYS.order, UI.requireOrderDefault ? 'sorted' : 'any') !== 'any',
+  order: normalizeOrder(loadSetting(KEYS.order, UI.orderDefault)),
+  dropSwap: loadSetting(KEYS.dropSwap, UI.dropSwapDefault ? '1' : '0') === '1',
   // 1v1 round in progress: { timeLimitSec, startPerf, locked } (null in solo)
   versus: null,
 };
@@ -68,12 +76,12 @@ function resumeTimer() {
 }
 
 /** Win rules for the current game (see evaluateRow in core/yaku.js). */
-const rules = () => ({ requireOrder: state.requireOrder });
+const rules = () => ({ order: state.order });
 
 const shareLink = () => {
   const url = new URL(location.href);
   const params = new URLSearchParams({ seed: state.seed, d: state.difficulty });
-  if (!state.requireOrder) params.set('order', 'any');
+  if (state.order !== 'strict') params.set('order', state.order);
   url.search = params.toString();
   return url.toString();
 };
@@ -81,23 +89,23 @@ const shareLink = () => {
 function syncUrl() {
   const params = new URLSearchParams({ d: state.difficulty });
   if (state.typed) params.set('seed', state.seed);
-  if (!state.requireOrder) params.set('order', 'any');
+  if (state.order !== 'strict') params.set('order', state.order);
   history.replaceState(null, '', `?${params}`);
 }
 
 // ---------------------------------------------------------------------------
 
-function newPuzzle({ seed = '', difficulty = state.difficulty, requireOrder = state.requireOrder, versus = false } = {}) {
+function newPuzzle({ seed = '', difficulty = state.difficulty, order = state.order, versus = false } = {}) {
   state.typed = seed !== '';
   state.seed = state.typed ? seed : randomSeed(GENERATION.randomSeedLength);
   state.difficulty = DIFFICULTIES[difficulty] ? difficulty : DEFAULT_DIFFICULTY;
-  state.requireOrder = requireOrder;
+  state.order = normalizeOrder(order);
   state.puzzle = generatePuzzle(state.seed, state.difficulty, rules());
   hud.setPuzzle({ ...state, roundWind: state.puzzle.board.roundWind });
   boardHost.hidden = false;
   if (!versus) {
     saveSetting(KEYS.difficulty, state.difficulty);
-    saveSetting(KEYS.order, state.requireOrder ? 'sorted' : 'any');
+    saveSetting(KEYS.order, state.order);
     syncUrl();
   }
   restart();
@@ -207,7 +215,7 @@ boardHost.hidden = true;
 const view = createBoardView(boardHost, { onMove: doMove });
 
 const hud = createHud({
-  onPlay: ({ seed, difficulty, requireOrder }) => newPuzzle({ seed, difficulty, requireOrder }),
+  onPlay: ({ seed, difficulty, order }) => newPuzzle({ seed, difficulty, order }),
   onResume: resumeTimer,
   onTitle: showHome,
   onMenu: () => (versus.active ? versus.requestLeave() : openMenu()),
@@ -219,6 +227,11 @@ const hud = createHud({
     saveSetting(KEYS.controls, mode);
     view.setControlMode(mode);
   },
+  onDropSwap: (on) => {
+    state.dropSwap = on;
+    saveSetting(KEYS.dropSwap, on ? '1' : '0');
+    view.setDropSwap(on);
+  },
   onHints: (on) => {
     state.hints = on;
     saveSetting(KEYS.hints, on ? '1' : '0');
@@ -226,6 +239,7 @@ const hud = createHud({
   },
 });
 view.setControlMode(state.controlMode);
+view.setDropSwap(state.dropSwap);
 
 // Keyboard: Ctrl+Z undo; WASD / arrow keys shift the row or column of the tile under the mouse.
 const KEY_MOVES = {
@@ -263,14 +277,15 @@ setInterval(() => {
 const overlay = document.getElementById('board-overlay');
 
 const versus = createVersus({
-  startRound({ seed, difficulty, hints, controlMode, requireOrder, startsInMs, timeLimitSec, round, rounds }) {
+  startRound({ seed, difficulty, hints, controlMode, order, dropSwap, startsInMs, timeLimitSec, round, rounds }) {
     const startPerf = performance.now() + startsInMs;
     state.versus = { timeLimitSec, startPerf, locked: false };
     state.hints = hints;
     state.controlMode = controlMode;
     view.setControlMode(controlMode);
+    view.setDropSwap(dropSwap);
     hud.setVersus(true, { round, rounds });
-    newPuzzle({ seed, difficulty, requireOrder, versus: true });
+    newPuzzle({ seed, difficulty, order, versus: true });
     state.startedAt = startPerf; // the round clock starts when the countdown ends
     renderStats();
   },
@@ -289,8 +304,10 @@ const versus = createVersus({
     state.versus = null;
     state.hints = loadSetting(KEYS.hints, UI.hintsDefault ? '1' : '0') === '1';
     state.controlMode = loadSetting(KEYS.controls, UI.controlModeDefault);
-    state.requireOrder = loadSetting(KEYS.order, UI.requireOrderDefault ? 'sorted' : 'any') !== 'any';
+    state.order = normalizeOrder(loadSetting(KEYS.order, UI.orderDefault));
+    state.dropSwap = loadSetting(KEYS.dropSwap, UI.dropSwapDefault ? '1' : '0') === '1';
     view.setControlMode(state.controlMode);
+    view.setDropSwap(state.dropSwap);
     hud.setVersus(false);
     state.puzzle = null;
     state.startedAt = null;
@@ -347,7 +364,7 @@ if (params.has('seed')) {
   newPuzzle({
     seed: params.get('seed'),
     difficulty: params.get('d') ?? state.difficulty,
-    requireOrder: params.get('order') !== 'any',
+    order: normalizeOrder(params.get('order') ?? 'strict'),
   });
 } else {
   showHome();
